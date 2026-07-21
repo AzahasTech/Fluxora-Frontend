@@ -61,5 +61,29 @@ describe("Dashboard wallet source", () => {
       screen.queryByText(/Connect your Stellar wallet to see real balances/i),
     ).not.toBeInTheDocument();
     expect(screen.getByText("22,600 USDC")).toBeInTheDocument();
+    expect(screen.getByText("48,500 USDC")).toBeInTheDocument();
+  });
+
+  it("respects a non-en-US locale for Total Streaming and Withdrawable amounts", () => {
+    const originalLanguage = navigator.language;
+    Object.defineProperty(navigator, "language", {
+      value: "de-DE",
+      configurable: true,
+    });
+
+    walletState.connected = true;
+    walletState.address = "GCONNECTED";
+
+    try {
+      renderDashboard();
+
+      expect(screen.getByText("48.500 USDC")).toBeInTheDocument();
+      expect(screen.getByText("22.600 USDC")).toBeInTheDocument();
+    } finally {
+      Object.defineProperty(navigator, "language", {
+        value: originalLanguage,
+        configurable: true,
+      });
+    }
   });
 });

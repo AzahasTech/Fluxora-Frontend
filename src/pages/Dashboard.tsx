@@ -10,6 +10,7 @@ import ToastNotification, {
 } from "../components/ToastNotification";
 import { useLiveAnnouncer } from "../hooks/useLiveAnnouncer";
 import { useWallet } from "../components/wallet-connect/Walletcontext";
+import { formatUsdc } from "../lib/formatters";
 import "../design-tokens.css";
 
 const ONBOARDING_KEY = "fluxora_onboarding_dismissed";
@@ -41,6 +42,7 @@ export default function Dashboard() {
     variant: ToastVariant;
   } | null>(null);
   const [withdrawable, setWithdrawable] = useState<number | null>(null);
+  const [totalStreaming, setTotalStreaming] = useState<number | null>(null);
   const { announcement, announce } = useLiveAnnouncer();
   const wallet = useWallet();
   const walletConnected = wallet.connected;
@@ -48,6 +50,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     setWithdrawable(walletConnected ? 22600 : null);
+    setTotalStreaming(walletConnected ? 48500 : null);
   }, [walletConnected]);
 
   useEffect(() => {
@@ -192,7 +195,9 @@ export default function Dashboard() {
           >
             Total Streaming
           </div>
-          <div className="text-heading-2">-- USDC</div>
+          <div className="text-heading-2">
+            {totalStreaming !== null ? formatUsdc(totalStreaming) : "-- USDC"}
+          </div>
         </div>
         <div style={card}>
           <div
@@ -202,9 +207,7 @@ export default function Dashboard() {
             Withdrawable
           </div>
           <div className="text-heading-2">
-            {withdrawable !== null
-              ? `${withdrawable.toLocaleString()} USDC`
-              : "-- USDC"}
+            {withdrawable !== null ? formatUsdc(withdrawable) : "-- USDC"}
           </div>
         </div>
       </div>

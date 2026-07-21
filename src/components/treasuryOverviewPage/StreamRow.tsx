@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import StatusPill from "./StatusPill";
 import type { Stream } from "./Stream";
+import { formatUsdc } from "../../lib/formatters";
 
 interface Props {
   stream: Stream;
@@ -15,9 +16,7 @@ function truncateAddress(address: string) {
 }
 
 function formatAccruedAmount(amount: number) {
-  return `${new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: 2,
-  }).format(amount)} USDC accrued`;
+  return `${formatUsdc(amount)} accrued`;
 }
 
 export default function StreamRow({ stream, isSelected = false, onSelect }: Props) {
