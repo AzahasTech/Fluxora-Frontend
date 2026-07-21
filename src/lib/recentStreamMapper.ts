@@ -1,27 +1,23 @@
-import { formatUsdc } from "./formatters";
+import type { Stream } from "../components/RecentStreams";
+import type { StreamRecord } from "../data/streamRecords";
 
-export { formatUsdc };
-
-export interface RecentStreamData {
-  id: string;
-  name: string;
-  recipient: string;
-  rate: string;
-  status: "Active" | "Paused" | "Completed";
-  amount?: number;
-  formattedAmount?: string;
+export function formatUsdc(amount: number): string {
+  return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(
+    amount,
+  )} USDC`;
 }
 
-export function mapRecentStream(stream: RecentStreamData): RecentStreamData {
+/**
+ * Map a normalized {@link StreamRecord} onto the lightweight row shape the
+ * dashboard RecentStreams table renders. `detailUrl` is intentionally left
+ * unset so the table falls back to the canonical stream detail route.
+ */
+export function toRecentStream(record: StreamRecord): Stream {
   return {
-    ...stream,
-    formattedAmount:
-      typeof stream.amount === "number"
-        ? formatUsdc(stream.amount)
-        : stream.formattedAmount,
+    name: record.name,
+    id: record.id,
+    recipient: record.recipientAddress || record.recipientName,
+    rate: `${formatUsdc(record.monthlyRate)} / mo`,
+    status: record.status,
   };
-}
-
-export function formatTotalStreaming(total: number): string {
-  return formatUsdc(total);
 }

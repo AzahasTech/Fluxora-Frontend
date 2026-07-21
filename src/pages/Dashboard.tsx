@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import RecentStreams, { Stream } from "../components/RecentStreams";
 import CreateStreamModal from "../components/CreateStreamModal";
 import TreasuryOverviewLoading from "../components/TreasuryOverviewLoading";
@@ -10,32 +10,14 @@ import ToastNotification, {
 } from "../components/ToastNotification";
 import { useLiveAnnouncer } from "../hooks/useLiveAnnouncer";
 import { useWallet } from "../components/wallet-connect/Walletcontext";
-import { formatUsdc } from "../lib/formatters";
+import { useTreasury } from "../components/treasuryOverviewPage/useTreasury";
+import { readOnboardingDismissed } from "../lib/onboarding";
+import { formatUsdc, toRecentStream } from "../lib/recentStreamMapper";
 import "../design-tokens.css";
 
-const ONBOARDING_KEY = "fluxora_onboarding_dismissed";
-
-function hasSeenOnboarding(): boolean {
-  try {
-    return localStorage.getItem(ONBOARDING_KEY) === "true";
-  } catch {
-    return false;
-  }
-}
-
-function markOnboardingSeen(): void {
-  try {
-    localStorage.setItem(ONBOARDING_KEY, "true");
-  } catch {
-    // Storage unavailable; treat as transient.
-  }
-}
-
 export default function Dashboard() {
-  const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
-  const [streams] = useState<Stream[]>([]);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [toast, setToast] = useState<{
     message: string;
@@ -47,16 +29,24 @@ export default function Dashboard() {
   const wallet = useWallet();
   const walletConnected = wallet.connected;
   const walletAddress = wallet.address;
+  const treasury = useTreasury();
+  const { loading, error, refetch } = treasury;
+  const streams = useMemo<Stream[]>(
+    () => treasury.streams.map(toRecentStream),
+    [treasury.streams],
+  );
+  const totalStreaming = useMemo(
+    () =>
+      treasury.streams
+        .filter((record) => record.status === "Active")
+        .reduce((sum, record) => sum + record.depositAmount, 0),
+    [treasury.streams],
+  );
 
   useEffect(() => {
     setWithdrawable(walletConnected ? 22600 : null);
     setTotalStreaming(walletConnected ? 48500 : null);
   }, [walletConnected]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 1200);
-    return () => clearTimeout(timer);
-  }, []);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -66,7 +56,7 @@ export default function Dashboard() {
   }, [toast]);
 
   useEffect(() => {
-    if (!loading && streams.length === 0 && !hasSeenOnboarding()) {
+    if (!loading && streams.length === 0 && !readOnboardingDismissed()) {
       setShowOnboarding(true);
     }
 
@@ -92,12 +82,10 @@ export default function Dashboard() {
   }, [withdrawable, announce]);
 
   const handleDismissOnboarding = () => {
-    markOnboardingSeen();
     setShowOnboarding(false);
   };
 
   const handleOnboardingCreateStream = () => {
-    markOnboardingSeen();
     setShowOnboarding(false);
     setIsModalOpen(true);
   };
@@ -122,9 +110,10 @@ export default function Dashboard() {
   if (loading) return <TreasuryOverviewLoading />;
 
   const hasStreams = streams.length > 0;
+  const hasError = !!error;
 
   return (
-    <div>
+    <main id="main-content">
       <div aria-live="polite" aria-atomic="true" className="sr-only">
         {announcement}
       </div>
@@ -196,7 +185,7 @@ export default function Dashboard() {
             Total Streaming
           </div>
           <div className="text-heading-2">
-            {totalStreaming !== null ? formatUsdc(totalStreaming) : "-- USDC"}
+            {totalStreaming > 0 ? formatUsdc(totalStreaming) : "-- USDC"}
           </div>
         </div>
         <div style={card}>
@@ -211,6 +200,19 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {hasError && (
+        <div role="alert" style={walletBannerStyle}>
+          <span style={{ color: "var(--text)" }}>{error}</span>
+          <button
+            type="button"
+            className="button button--secondary"
+            onClick={refetch}
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {hasStreams ? (
         <>
@@ -259,7 +261,7 @@ export default function Dashboard() {
           onClose={() => setToast(null)}
         />
       ) : null}
-    </div>
+    </main>
   );
 }
 
