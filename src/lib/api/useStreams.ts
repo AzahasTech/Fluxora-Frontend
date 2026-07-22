@@ -180,7 +180,7 @@ export function useStreamById(id: string | null): UseStreamByIdResult {
     setLoading(true);
     setError(null);
 
-    getStreamById(id)
+    getStreamById(id, controller.signal)
       .then((data) => {
         if (!controller.signal.aborted) {
           setStream(data);
