@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import EmptyState from "../components/EmptyState";
+import RecipientEmptyState from "../components/RecipientEmptyState";
 import { RecipientStreams, type Stream } from "../components/recipient/RecipientStreams";
 import RecipientLoading from "../components/RecipientLoading";
 import ZeroAccrualBanner from "../components/ZeroAccrualBanner";
@@ -10,7 +10,6 @@ import type { StreamRecord } from "../data/streamRecords";
 import { withdraw } from "../lib/stellar/tx";
 import "./Streams.css";
 import { TRANSACTION_RESET_DELAY_MS } from "../lib/transactionConfig";
-import { useRef } from "react";
 
 // (Removed top-level timeoutRef and useEffect; will be added inside component)
 
@@ -85,7 +84,6 @@ export default function Recipient() {
 
   const recipientStreams = useRecipientStreams(wallet.address);
 
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   useEffect(() => {
     const t = setTimeout(() => setLoading(false), 2000);
     return () => clearTimeout(t);
@@ -223,7 +221,7 @@ export default function Recipient() {
         <p style={{ color: "var(--muted)", marginBottom: "2rem" }}>
           View your incoming streams and withdraw accrued USDC at any time.
         </p>
-        <EmptyState variant="recipient" walletConnected={walletConnected} />
+        <RecipientEmptyState walletConnected={walletConnected} />
       </main>
     );
   }
