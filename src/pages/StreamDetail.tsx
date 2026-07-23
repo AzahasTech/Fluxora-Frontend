@@ -6,6 +6,7 @@ import Breadcrumb from "../components/navigation/Breadcrumb";
 import { Skeleton } from "../components/Skeleton";
 import StreamTimeline from "../components/StreamTimeline";
 import { useTickingNow } from "../hooks/useTickingNow";
+import { MetaTags } from "../components/MetaTags";
 
 /**
  * StreamDetail page
@@ -169,6 +170,7 @@ export default function StreamDetail() {
   return (
     <div data-testid="stream-detail-page" style={{ padding: "1.5rem" }}>
       <Breadcrumb items={breadcrumbItems} />
+      <MetaTags stream={stream} />
 
       {/* Header */}
       <div style={{ marginTop: "1.5rem", marginBottom: "1.5rem" }}>
