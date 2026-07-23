@@ -147,4 +147,173 @@ describe("Recipient wallet source", () => {
     expect(getWithdrawAmount(0)).toBeNull();
     expect(getWithdrawAmount(Number.NaN)).toBeNull();
   });
+
+  describe("Recipient Local Security Gate", () => {
+    beforeEach(() => {
+      localStorage.clear();
+      // Mock window.PublicKeyCredential
+      vi.stubGlobal("PublicKeyCredential", {
+        isUserVerifyingPlatformAuthenticatorAvailable: vi.fn().mockResolvedValue(true)
+      });
+      // Mock navigator.credentials
+      vi.stubGlobal("navigator", {
+        ...navigator,
+        credentials: {
+          create: vi.fn().mockResolvedValue({}),
+          get: vi.fn().mockResolvedValue({})
+        }
+      });
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("renders the security gate settings card when connected", async () => {
+      walletState.connected = true;
+      walletState.address = "GATDOSCZNJ5YZHNOX7IOD4QDCQSTMR2YNF5IXHFNX3H6B4ICCMSDLOWN";
+      walletState.network = "TESTNET";
+
+      renderRecipient();
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(screen.getByText("Local Security Gate")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Enable" })).toBeInTheDocument();
+      expect(screen.getByText("Disabled")).toBeInTheDocument();
+    });
+
+    it("runs biometric and PIN enrollment successfully", async () => {
+      walletState.connected = true;
+      walletState.address = "GATDOSCZNJ5YZHNOX7IOD4QDCQSTMR2YNF5IXHFNX3H6B4ICCMSDLOWN";
+      walletState.network = "TESTNET";
+
+      renderRecipient();
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      // Open enrollment
+      fireEvent.click(screen.getByRole("button", { name: "Enable" }));
+      expect(screen.getByText("Setup Security Gate")).toBeInTheDocument();
+
+      // Register device biometrics
+      fireEvent.click(screen.getByRole("button", { name: "Register Device Biometrics" }));
+      
+      // Since navigator.credentials.create resolves, it should proceed to PIN configuration step
+      await act(async () => {
+        await Promise.resolve();
+      });
+      
+      expect(screen.getByText("Set Security PIN")).toBeInTheDocument();
+
+      // Enter PIN: "1234"
+      fireEvent.click(screen.getByRole("button", { name: "1" }));
+      fireEvent.click(screen.getByRole("button", { name: "2" }));
+      fireEvent.click(screen.getByRole("button", { name: "3" }));
+      fireEvent.click(screen.getByRole("button", { name: "4" }));
+
+      // Wait for transition to confirm step
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+
+      expect(screen.getByText("Confirm Security PIN")).toBeInTheDocument();
+
+      // Re-enter matching PIN: "1234"
+      fireEvent.click(screen.getByRole("button", { name: "1" }));
+      fireEvent.click(screen.getByRole("button", { name: "2" }));
+      fireEvent.click(screen.getByRole("button", { name: "3" }));
+      fireEvent.click(screen.getByRole("button", { name: "4" }));
+
+      // Wait for success transition
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+
+      expect(screen.getByText("Setup Complete!")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+      expect(screen.getByText("Active")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Disable" })).toBeInTheDocument();
+    });
+
+    it("falls back to PIN setup when biometrics are unsupported", async () => {
+      // Mock biometrics not supported
+      vi.mocked(PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable).mockResolvedValue(false);
+      
+      walletState.connected = true;
+      walletState.address = "GATDOSCZNJ5YZHNOX7IOD4QDCQSTMR2YNF5IXHFNX3H6B4ICCMSDLOWN";
+      walletState.network = "TESTNET";
+
+      renderRecipient();
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Enable" }));
+      
+      // Should go straight to PIN setup (since checking support finds false)
+      expect(screen.getByText("Set Security PIN")).toBeInTheDocument();
+    });
+
+    it("requires confirmation when withdrawing if local gate is active", async () => {
+      // Setup enrolled state in localStorage
+      localStorage.setItem("fluxora_security_gate_enabled", "true");
+      localStorage.setItem("fluxora_biometric_enrolled", "true");
+      localStorage.setItem("fluxora_backup_pin", "1234");
+
+      walletState.connected = true;
+      walletState.address = "GATDOSCZNJ5YZHNOX7IOD4QDCQSTMR2YNF5IXHFNX3H6B4ICCMSDLOWN";
+      walletState.network = "TESTNET";
+
+      renderRecipient();
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: /Withdraw 22,600 USDC/i }));
+
+      // Verification modal should open
+      expect(screen.getByText("Authorize Withdrawal")).toBeInTheDocument();
+
+      // Wait for triggerBiometricVerification promise resolution
+      await act(async () => {
+        await Promise.resolve(); // triggerBiometricVerification
+        await Promise.resolve(); // navigator.credentials.get
+      });
+
+      // Advance timers to trigger the success transition delay (1000ms)
+      act(() => {
+        vi.advanceTimersByTime(1100);
+      });
+
+      expect(withdrawMock).toHaveBeenCalled();
+    });
+
+    it("allows bypassing the local gate via Skip to Wallet button", async () => {
+      localStorage.setItem("fluxora_security_gate_enabled", "true");
+      localStorage.setItem("fluxora_biometric_enrolled", "true");
+      localStorage.setItem("fluxora_backup_pin", "1234");
+
+      walletState.connected = true;
+      walletState.address = "GATDOSCZNJ5YZHNOX7IOD4QDCQSTMR2YNF5IXHFNX3H6B4ICCMSDLOWN";
+      walletState.network = "TESTNET";
+
+      renderRecipient();
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: /Withdraw 22,600 USDC/i }));
+
+      // Click skip/bypass
+      fireEvent.click(screen.getByRole("button", { name: "Skip to Wallet signing" }));
+
+      // Modal closes, withdraw triggers directly
+      expect(screen.queryByText("Authorize Withdrawal")).not.toBeInTheDocument();
+      expect(withdrawMock).toHaveBeenCalled();
+    });
+  });
 });
