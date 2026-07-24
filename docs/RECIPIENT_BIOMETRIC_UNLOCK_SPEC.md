@@ -1,69 +1,57 @@
-# Recipient Withdraw Biometric Unlock UX Specification
+# Recipient Biometric Unlock Specification
 
-This document defines the design, security boundaries, state transitions, and accessibility compliance for the local biometric confirmation gate on the Recipient page.
+## Overview
+This specification details the UI/UX design for the optional biometric-unlock confirmation step prior to withdrawing funds on the Recipient page (`src/pages/Recipient.tsx`). This feature introduces a local security gate (WebAuthn platform authenticator) to prevent unauthorized or accidental withdrawals before handing off the transaction to the wallet's own signing prompt. 
 
-## 1. Overview & Security Boundaries
+## Requirements
+- **Opt-in Enrollment Flow**: Users must explicitly enable the local security gate.
+- **Biometric Prompt UI**: Per-withdraw prompt with states for active, success, failure, and cancelled.
+- **Fallback Path**: A PIN-based fallback is required if biometrics are unsupported or fail. Biometric absence must never block withdrawal entirely.
+- **Accessibility**: Fallback path must be keyboard-operable. Contrast ratios must meet 4.5:1 (WCAG 2.1 AA).
+- **Security Notice**: Clear documentation that this is a local UX gate only and not a substitute for on-chain transaction signing security.
 
-The **Local Security Gate** is a local authentication mechanism configured to prevent unauthorized transaction initiation directly from the device. 
+## State Definitions
 
-> [!IMPORTANT]
-> **Security Boundaries:**
-> - This gate is a **local confirmation step only** and does not manage, store, or replace cryptographic keys.
-> - Transaction signing is still performed on-chain via the Freighter browser extension.
-> - The biometric enrollments use the browser standard WebAuthn API (`navigator.credentials.create` and `navigator.credentials.get`).
-> - A 4-digit backup PIN is configured as a fallback.
-> - A "Skip to Wallet signing" bypass is provided to prevent funds from being permanently locked due to local authenticator failures.
+### 1. Enrollment Flow
+- **not-enrolled**: Initial state. User sees "Enable" button on the Local Security Gate card.
+- **check-support (Enrolling)**: Modal prompts user to "Register Device Biometrics" using WebAuthn.
+- **set-pin**: Modal asks user to enter a 4-digit backup PIN.
+- **confirm-pin**: Modal asks user to re-enter the 4-digit backup PIN.
+- **success**: Confirmation that the security gate is active.
 
----
+### 2. Verification Flow
+- **enrolled-idle**: Security gate is enabled but no action is currently pending.
+- **prompt-active**: Waiting for device biometric verification (Touch ID, Face ID, Windows Hello).
+- **prompt-succeeded**: Biometric verification passed; proceeding to Freighter signing.
+- **prompt-failed**: Biometric verification rejected. Provides options to "Try Again" or "Use Backup PIN".
+- **prompt-cancelled**: Biometric verification cancelled by user. Provides options to "Try Again" or "Use Backup PIN".
+- **unsupported-device-fallback**: PIN entry modal shown when biometrics are unavailable or user chooses to skip biometrics.
 
-## 2. Opt-in Enrollment Flow
+## Design Specs & Accessibility Annotations
 
-The enrollment flow is hosted in a dedicated card on the Recipient page.
+### Contrast Requirements (WCAG 2.1 AA)
+- **Primary Text**: `var(--color-text-primary)` against `var(--color-bg-surface)` must meet >= 4.5:1.
+- **Secondary Text**: `var(--color-text-secondary)` against `var(--color-bg-surface)` must meet >= 4.5:1.
+- **Fallback Button**: `.ui-secondary-control` must have sufficient border/text contrast against modal background.
+- **Error States**: Error messages (`var(--color-danger)`) must meet >= 4.5:1 against the background.
 
-1. **Status Checked:** On render, the page checks if the gate is enabled via `localStorage` (`fluxora_security_gate_enabled`).
-2. **Setup Initiation:** Clicking "Enable" opens the **Enrollment Modal**.
-3. **Biometric Support Detection:**
-   - The UI checks if `window.PublicKeyCredential` is available and calls `PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()`.
-   - If supported, the user is prompted to register their platform authenticator (Touch ID, Face ID, Windows Hello).
-   - If not supported, the flow skips to PIN setup.
-4. **Backup PIN Setup:**
-   - The user inputs a 4-digit security PIN.
-   - The user re-enters the PIN to confirm.
-5. **Success Stage:** The gate is marked active, and settings are saved.
+### Keyboard & Screen Reader Accessibility
+- **Focus Management**: Focus is trapped inside the `.security-modal` when active (`useModalAccessibility` hook).
+- **Fallback Action**: The "Use Backup PIN" and "Skip to Wallet signing" buttons are fully focusable via `Tab`. 
+- **PIN Keypad**: Keypad buttons have explicit `aria-label` where necessary (e.g., "Backspace") and are grouped under `role="group"` with `aria-label="PIN keypad"`.
+- **Screen Reader Announcements**: Hidden screen reader text (`.sr-only`) announces the current length of the entered PIN.
+- **Escape Key**: Modal can be closed using the Escape key or the close button (`aria-label="Close verification dialog"`).
 
----
+### Responsive Design
+- The `.security-modal` is designed to be responsive, taking full width on mobile viewports (with padding) and centering on desktop.
+- The `pin-keypad` uses CSS Grid to ensure large, tappable touch targets (min 44x44px per Apple/Android HIG) for mobile device users.
 
-## 3. Interaction States
+## Security Disclaimer
+The biometric and PIN verification is strictly a local UX friction layer. It **does not** handle private keys or replace the cryptographic signature required by the Freighter wallet to authorize the on-chain Soroban contract invocation.
 
-The security gate lifecycle is defined by 8 distinct UX states:
-
-| State | Description | UI representation |
-| :--- | :--- | :--- |
-| `not-enrolled` | Gate is disabled. | Settings card shows status "Disabled", action button "Enable". |
-| `enrolling` | Setup wizard modal is active. | Modal displays biometric enrollment or PIN creation pad. |
-| `enrolled-idle` | Gate is enabled and waiting. | Settings card shows status "Active", action buttons "Disable" and "Change PIN". |
-| `prompt-active` | Withdrawal initiated, waiting for biometric verification. | Verification modal shows a fingerprint icon with a pulse animation. WebAuthn prompt is active. |
-| `prompt-succeeded` | Verification succeeded. | Modal displays a checkmark with status "Verification Succeeded!" and automatically transitions. |
-| `prompt-failed` | Verification failed. | Modal displays an error badge, "Try Again", and "Use Backup PIN" options. |
-| `prompt-cancelled` | Verification cancelled by the user. | Modal displays a warning icon, allowing retry or fallback options. |
-| `unsupported-device-fallback` | Device lacks biometric hardware or verification was bypassed. | Modal displays a 4-digit PIN pad overlay for code verification. |
-
----
-
-## 4. Keyboard Accessibility & WCAG Compliance
-
-To ensure full compliance with accessibility standards:
-
-- **Focus Trap:** When any modal opens, focus is directed inside the modal. Tab and Shift+Tab key actions are trapped within the modal scope using a ref-based focus interceptor.
-- **Escape Key Interception:** Pressing the `Escape` key closes the active modal and returns focus to the trigger button.
-- **Contrast Ratios:** All text elements conform to WCAG AA guidelines with a contrast ratio of at least `4.5:1` against the background.
-- **Interactive Labels:** Screen reader announcements (e.g. `aria-live="polite"` and `sr-only` descriptive labels) are provided for pin length indicators and visual states.
-- **Scroll Locking:** Body scrolling is locked when overlays are open to prevent disorientation.
-
----
-
-## 5. Responsive Design
-
-- **Grid/Flex Adjustments:** Layout shifts to vertical alignment on viewports narrower than `640px`.
-- **PIN Pad Layout:** Circular PIN buttons are sized dynamically to ensure a comfortable touch target of at least `48px` on mobile devices.
-- **Scale Animations:** Modals use smooth CSS scale-in transforms and fade-in backdrops.
+## Hand-off Checklist
+- [x] States defined and implemented in `src/pages/Recipient.tsx`
+- [x] Tokens and redlines integrated via `Recipient.css` / CSS variables
+- [x] Fallback path (PIN) always available
+- [x] Keyboard focus trap and ARIA labels implemented
+- [x] Biometric skip path tested
