@@ -4,8 +4,6 @@ import { axe } from "vitest-axe";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Recipient gates the withdraw flow on a connected wallet on the matching
-
-// Recipient gates the withdraw flow on a connected wallet on the matching
 // network. The global test setup stubs the wallet as disconnected, so provide a
 // connected stub here to exercise the loaded recipient portal.
 const mockWalletState = {

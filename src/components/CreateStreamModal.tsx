@@ -1536,7 +1536,6 @@ export default function CreateStreamModal({
                   placeholder="0.00"
                   hasError={Boolean(accrualRateError)}
                   aria-required="true"
-                  aria-invalid={Boolean(accrualRateError)}
                   aria-describedby={accrualRateError ? 'create-stream-accrual-rate-error' : 'create-stream-accrual-rate-hint'}
                 />
               </div>
@@ -1590,7 +1589,6 @@ export default function CreateStreamModal({
                   placeholder="1"
                   hasError={Boolean(durationError)}
                   aria-required="true"
-                  aria-invalid={Boolean(durationError)}
                   aria-describedby={durationError ? 'create-stream-duration-error' : 'create-stream-duration-hint'}
                 />
               </div>
