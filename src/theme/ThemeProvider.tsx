@@ -686,3 +686,15 @@ export function useOptionalTheme(): ThemeContextValue {
     toggleTheme: () => undefined,
   };
 }
+
+/** Reads theme state for leaf components that are also supported standalone. */
+export function useOptionalTheme(): ThemeContextValue {
+  const context = useContext(ThemeContext);
+  if (context !== null) return context;
+
+  return {
+    theme: "light",
+    setTheme: () => undefined,
+    toggleTheme: () => undefined,
+  };
+}
