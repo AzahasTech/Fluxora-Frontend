@@ -21,7 +21,7 @@ import {
  * tampered or corrupted `localStorage` entries — is rejected before it can
  * reach the DOM, preventing `data-theme` attribute injection.
  */
-export type Theme = "light" | "dark";
+export type Theme = "light" | "dark" | "cyberpunk";
 
 /** `localStorage` key under which the user's explicit built-in theme is persisted. */
 export const THEME_STORAGE_KEY = "theme";
@@ -42,7 +42,7 @@ const DARK_MEDIA_QUERY = "(prefers-color-scheme: dark)";
  * @returns `true` only when `value` is exactly `"light"` or `"dark"`.
  */
 export function isTheme(value: unknown): value is Theme {
-  return value === "light" || value === "dark";
+  return value === "light" || value === "dark" || value === "cyberpunk";
 }
 
 // ─── 2. Custom theme types ────────────────────────────────────────────────────
@@ -673,4 +673,16 @@ export function useTheme(): ThemeContextValue {
     throw new Error("useTheme must be used within a ThemeProvider");
   }
   return ctx;
+}
+
+/** Reads theme state for leaf components that are also supported standalone. */
+export function useOptionalTheme(): ThemeContextValue {
+  const context = useContext(ThemeContext);
+  if (context !== null) return context;
+
+  return {
+    theme: "light",
+    setTheme: () => undefined,
+    toggleTheme: () => undefined,
+  };
 }
