@@ -23,6 +23,7 @@ const DEMO_TOTAL_ACCRUED = 43250.0;
 const DEMO_TOTAL_WITHDRAWN = 20650.0;
 const USDC_SCALE = 10_000_000;
 const MAX_U64 = 18_446_744_073_709_551_615n;
+const RECIPIENT_PAGE_TITLE = "Fluxora — Recipient portal";
 const ALERTS_STORAGE_KEY = "fluxora.stream-alerts.enabled";
 
 export type NotificationPermissionState = "default" | "granted" | "denied" | "unsupported";
@@ -82,14 +83,29 @@ export function getWithdrawAmount(balance: number): string | null {
   return scaledAmount > 0 ? scaledAmount.toString() : null;
 }
 
+export function getRecipientPageTitle(
+  count: number,
+  isTabFocused: boolean,
+): string {
+  if (isTabFocused || count <= 0) return RECIPIENT_PAGE_TITLE;
+
+  const displayCount = count >= 9 ? "9+" : count.toString();
+  return `(${displayCount}) ${RECIPIENT_PAGE_TITLE}`;
+}
+
 export default function Recipient() {
   const timeoutRef = useRef<number | null>(null);
   const wallet = useWallet();
   const { addToast } = useToast();
 
   const [loading, setLoading] = useState(true);
-  const [txState, setTxState] = useState<"idle" | "signing" | "submitting" | "confirmed" | "error">("idle");
+  const [txState, setTxState] = useState<
+    "idle" | "signing" | "submitting" | "confirmed" | "error"
+  >("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isTabFocused, setIsTabFocused] = useState<boolean>(() =>
+    typeof window === "undefined" ? true : document.hasFocus(),
+  );
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionState>(getBrowserNotificationPermission);
   const [alertsEnabled, setAlertsEnabled] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -126,10 +142,21 @@ export default function Recipient() {
   }, [wallet.address]);
 
   useEffect(() => {
+    const handleBlur = () => setIsTabFocused(false);
+    const handleFocus = () => setIsTabFocused(true);
+
+    window.addEventListener("blur", handleBlur);
+    window.addEventListener("focus", handleFocus);
+
     return () => {
+      window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("focus", handleFocus);
+
       if (timerRef.current) {
         clearTimeout(timerRef.current);
       }
+
+      document.title = RECIPIENT_PAGE_TITLE;
     };
   }, []);
 
@@ -146,9 +173,21 @@ export default function Recipient() {
     status: "Active",
     withdrawableAmount: DEMO_BALANCE,
   };
-  const selectedWithdrawStream = selectWithdrawStream(
-    hasLiveStreams ? liveStreams : [demoWithdrawStream],
-  );
+
+  const walletConnected = wallet.connected;
+
+  const withdrawStreamCandidates = walletConnected
+    ? hasLiveStreams
+      ? liveStreams
+      : [demoWithdrawStream]
+    : [];
+  const pendingWithdrawalCount = withdrawStreamCandidates.filter(
+    (stream) =>
+      stream.status === "Active" &&
+      stream.withdrawableAmount > 0 &&
+      isValidWithdrawStreamId(stream.id),
+  ).length;
+  const selectedWithdrawStream = selectWithdrawStream(withdrawStreamCandidates);
 
   const balance = hasLiveStreams
     ? liveStreams.reduce((sum, stream) => sum + stream.withdrawableAmount, 0)
@@ -161,15 +200,22 @@ export default function Recipient() {
     : DEMO_TOTAL_ACCRUED;
   const totalWithdrawn = hasLiveStreams
     ? liveStreams.reduce(
-        (sum, stream) => sum + Math.max(0, stream.streamedAmount - stream.withdrawableAmount),
+        (sum, stream) =>
+          sum + Math.max(0, stream.streamedAmount - stream.withdrawableAmount),
         0,
       )
     : DEMO_TOTAL_WITHDRAWN;
 
-  const walletConnected = wallet.connected;
   const hasStreams = activeStreams > 0;
 
   const networkMismatch = wallet.connected && wallet.isNetworkMismatch;
+
+  useEffect(() => {
+    document.title = getRecipientPageTitle(
+      pendingWithdrawalCount,
+      isTabFocused,
+    );
+  }, [isTabFocused, pendingWithdrawalCount]);
 
   const setStoredAlertsEnabled = (enabled: boolean) => {
     setAlertsEnabled(enabled);
@@ -211,7 +257,7 @@ export default function Recipient() {
 
   // Zero-accrual: connected + streams exist + no withdrawable balance yet
   const isZeroAccrual = walletConnected && hasStreams && balance === 0;
-  
+
   const isPending = txState === "signing" || txState === "submitting";
   const disabled =
     !walletConnected ||
@@ -313,8 +359,12 @@ export default function Recipient() {
             withdrawal to your connected wallet.
           </p>
           {(errorMsg || networkMismatch) && (
-            <p className="validation-message validation-message--error" style={{ color: "var(--color-danger)", marginTop: "1rem" }} role="alert">
-              {networkMismatch 
+            <p
+              className="validation-message validation-message--error"
+              style={{ color: "var(--color-danger)", marginTop: "1rem" }}
+              role="alert"
+            >
+              {networkMismatch
                 ? `Wrong network: Freighter is connected to ${wallet.network?.toUpperCase()}, but Fluxora is configured for ${wallet.expectedNetworkLabel}.`
                 : errorMsg}
             </p>
@@ -364,7 +414,9 @@ export default function Recipient() {
         </div>
         <div className="streams-summary-card">
           <span>Withdrawable now</span>
-          <strong style={{ color: "var(--accent)" }}>{balance.toLocaleString()} USDC</strong>
+          <strong style={{ color: "var(--accent)" }}>
+            {balance.toLocaleString()} USDC
+          </strong>
           <p>Available for immediate withdrawal.</p>
         </div>
       </section>
@@ -423,7 +475,8 @@ export default function Recipient() {
           <div>
             <h2>Incoming streams</h2>
             <p className="streams-subtitle">
-              Review and manage each individual stream currently committing funds to you.
+              Review and manage each individual stream currently committing
+              funds to you.
             </p>
           </div>
         </div>
