@@ -153,7 +153,14 @@ export default function RecentStreams({
 
         {/* Table view container (always shown on mobile, conditional on desktop) */}
         <div className={viewMode === "table" ? "block" : "block md:hidden"}>
-          <StreamsTable streams={streams} />
+          <StreamsTable
+            streams={streams}
+            onCompare={(leftId, rightId) =>
+              navigate(
+                `/app/streams/${encodeURIComponent(leftId)}?compare=${encodeURIComponent(rightId)}`,
+              )
+            }
+          />
         </div>
       </div>
     </div>
