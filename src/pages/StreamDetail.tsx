@@ -60,6 +60,7 @@ export default function StreamDetail() {
     }
 
     let cancelled = false;
+    const controller = new AbortController();
 
     setLoading(true);
     setError(null);
@@ -82,6 +83,7 @@ export default function StreamDetail() {
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [streamId, isCompareMode]);
 
