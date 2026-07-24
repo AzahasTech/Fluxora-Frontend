@@ -86,6 +86,7 @@ export default function Recipient() {
 
   const recipientStreams = useRecipientStreams(wallet.address);
 
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   useEffect(() => {
     const t = setTimeout(() => setLoading(false), 2000);
     return () => clearTimeout(t);
