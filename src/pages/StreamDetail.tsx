@@ -49,7 +49,7 @@ export default function StreamDetail() {
     setLoading(true);
     setError(null);
 
-    getStreamById(decodeURIComponent(streamId))
+    getStreamById(decodeURIComponent(streamId), controller.signal)
       .then((result) => {
         if (!cancelled) {
           setStream(result);

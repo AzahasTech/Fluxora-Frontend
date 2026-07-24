@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import EmptyState from "../components/EmptyState";
+import RecipientEmptyState from "../components/RecipientEmptyState";
 import { RecipientStreams, type Stream } from "../components/recipient/RecipientStreams";
 import RecipientLoading from "../components/RecipientLoading";
 import ZeroAccrualBanner from "../components/ZeroAccrualBanner";
@@ -73,6 +73,7 @@ export function getWithdrawAmount(balance: number): string | null {
 }
 
 export default function Recipient() {
+  const timeoutRef = useRef<number | null>(null);
   const wallet = useWallet();
   const { addToast } = useToast();
 
@@ -235,7 +236,7 @@ export default function Recipient() {
         <p style={{ color: "var(--muted)", marginBottom: "2rem" }}>
           View your incoming streams and withdraw accrued USDC at any time.
         </p>
-        <EmptyState variant="recipient" walletConnected={walletConnected} />
+        <RecipientEmptyState walletConnected={walletConnected} />
       </main>
     );
   }
