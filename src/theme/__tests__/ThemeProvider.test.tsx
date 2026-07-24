@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, act, renderHook } from "@testing-library/react";
+import { render, screen, act, renderHook, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   ThemeProvider,
@@ -13,6 +13,10 @@ import {
   THEME_STORAGE_KEY,
   CUSTOM_THEME_STORAGE_KEY,
   type Theme,
+  FONT_STORAGE_KEY,
+  isEasyReadFont,
+  applyFontPreference,
+  getStoredFontPreference,
   type CustomThemeDefinition,
 } from "../ThemeProvider";
 
@@ -48,6 +52,10 @@ function mockMatchMedia(matches: boolean, opts: { legacy?: boolean } = {}) {
 
 function currentDataTheme() {
   return document.documentElement.getAttribute("data-theme");
+}
+
+function currentDataFont(): string | null {
+  return document.documentElement.getAttribute("data-font");
 }
 
 function customProp(name: string) {
@@ -88,11 +96,15 @@ const LOCKED_TOKEN_BRAND: CustomThemeDefinition = {
   },
 };
 
-/** Small consumer that surfaces all custom-theme context values. */
+/** Small consumer that surfaces all theme, font, and custom-theme context values. */
 function ThemeProbe() {
   const {
     theme,
+    setTheme,
     toggleTheme,
+    easyReadFont,
+    setEasyReadFont,
+    toggleEasyReadFont,
     customTheme,
     customThemeState,
     registrationErrors,
@@ -109,6 +121,12 @@ function ThemeProbe() {
       <span data-testid="custom-id">{customTheme?.id ?? "none"}</span>
       <span data-testid="error-count">{registrationErrors.length}</span>
       <button onClick={toggleTheme}>toggle</button>
+      <button onClick={() => setTheme("dark")}>set-dark</button>
+      <button onClick={() => setTheme("light")}>set-light</button>
+      <span data-testid="easy-read">{String(easyReadFont)}</span>
+      <button onClick={toggleEasyReadFont}>toggle-font</button>
+      <button onClick={() => setEasyReadFont(true)}>set-font-true</button>
+      <button onClick={() => setEasyReadFont(false)}>set-font-false</button>
       <button onClick={() => registerTheme(VALID_BRAND)}>register-valid</button>
       <button onClick={() => registerTheme(CONTRAST_FAIL_BRAND)}>register-bad-contrast</button>
       <button onClick={() => registerTheme(LOCKED_TOKEN_BRAND)}>register-locked</button>
@@ -126,6 +144,8 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 beforeEach(() => {
   localStorage.clear();
   document.documentElement.removeAttribute("data-theme");
+  document.documentElement.removeAttribute("data-font");
+  document.documentElement.removeAttribute("data-font-transitioning");
   document.documentElement.removeAttribute("style");
   mockMatchMedia(false);
 });
@@ -472,6 +492,20 @@ describe("useTheme", () => {
     spy.mockRestore();
   });
 
+  it("provides the context value within a provider", () => {
+    mockMatchMedia(false);
+    const { result } = renderHook(() => useTheme(), {
+      wrapper: ({ children }) => <ThemeProvider>{children}</ThemeProvider>,
+    });
+    const value: Theme = result.current.theme;
+    expect(value).toBe("light");
+    expect(typeof result.current.setTheme).toBe("function");
+    expect(typeof result.current.toggleTheme).toBe("function");
+    expect(result.current.easyReadFont).toBe(false);
+    expect(typeof result.current.setEasyReadFont).toBe("function");
+    expect(typeof result.current.toggleEasyReadFont).toBe("function");
+  });
+
   it("exposes all new custom-theme API members", () => {
     const { result } = renderHook(() => useTheme(), { wrapper: Wrapper });
     expect(typeof result.current.registerTheme).toBe("function");
@@ -480,5 +514,155 @@ describe("useTheme", () => {
     expect(typeof result.current.clearCustomTheme).toBe("function");
     expect(result.current.customThemeState).toBeDefined();
     expect(Array.isArray(result.current.registrationErrors)).toBe(true);
+  });
+});
+
+describe("isEasyReadFont", () => {
+  it("accepts valid boolean/boolean-string members", () => {
+    expect(isEasyReadFont(true)).toBe(true);
+    expect(isEasyReadFont(false)).toBe(true);
+    expect(isEasyReadFont("true")).toBe(true);
+    expect(isEasyReadFont("false")).toBe(true);
+  });
+
+  it("rejects invalid values", () => {
+    expect(isEasyReadFont("invalid")).toBe(false);
+    expect(isEasyReadFont(null)).toBe(false);
+    expect(isEasyReadFont(undefined)).toBe(false);
+    expect(isEasyReadFont(123)).toBe(false);
+  });
+});
+
+describe("getStoredFontPreference", () => {
+  it("returns true when localStorage has true", () => {
+    localStorage.setItem(FONT_STORAGE_KEY, "true");
+    expect(getStoredFontPreference()).toBe(true);
+  });
+
+  it("returns false when localStorage has false or invalid", () => {
+    localStorage.setItem(FONT_STORAGE_KEY, "false");
+    expect(getStoredFontPreference()).toBe(false);
+    localStorage.setItem(FONT_STORAGE_KEY, "neon");
+    expect(getStoredFontPreference()).toBe(false);
+  });
+});
+
+describe("applyFontPreference", () => {
+  it("sets data-font attribute on the document root", () => {
+    applyFontPreference(true);
+    expect(currentDataFont()).toBe("easy-read");
+    applyFontPreference(false);
+    expect(currentDataFont()).toBe("default");
+  });
+});
+
+describe("initTheme font initialization", () => {
+  it("resolves and applies the font preference on initTheme", () => {
+    localStorage.setItem(FONT_STORAGE_KEY, "true");
+    initTheme();
+    expect(currentDataFont()).toBe("easy-read");
+  });
+});
+
+describe("ThemeProvider font behaviour", () => {
+  it("first visit with no preference uses default font", () => {
+    mockMatchMedia(false);
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+    expect(screen.getByTestId("easy-read")).toHaveTextContent("false");
+    expect(currentDataFont()).toBe("default");
+  });
+
+  it("first visit with stored preference true loads easy-read font", () => {
+    mockMatchMedia(false);
+    localStorage.setItem(FONT_STORAGE_KEY, "true");
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+    expect(screen.getByTestId("easy-read")).toHaveTextContent("true");
+    expect(currentDataFont()).toBe("easy-read");
+  });
+
+  it("toggleEasyReadFont flips the preference, persists, and handles transitioning status", () => {
+    vi.useFakeTimers();
+    mockMatchMedia(false);
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+
+    // Toggle on
+    fireEvent.click(screen.getByText("toggle-font"));
+    expect(screen.getByTestId("easy-read")).toHaveTextContent("true");
+    expect(currentDataFont()).toBe("easy-read");
+    expect(localStorage.getItem(FONT_STORAGE_KEY)).toBe("true");
+    expect(document.documentElement.getAttribute("data-font-transitioning")).toBe("true");
+
+    // Advance timer past transition time (150ms)
+    act(() => {
+      vi.advanceTimersByTime(150);
+    });
+    expect(document.documentElement.getAttribute("data-font-transitioning")).toBeNull();
+
+    // Toggle off
+    fireEvent.click(screen.getByText("toggle-font"));
+    expect(screen.getByTestId("easy-read")).toHaveTextContent("false");
+    expect(currentDataFont()).toBe("default");
+    expect(localStorage.getItem(FONT_STORAGE_KEY)).toBe("false");
+    expect(document.documentElement.getAttribute("data-font-transitioning")).toBe("true");
+
+    act(() => {
+      vi.advanceTimersByTime(150);
+    });
+    expect(document.documentElement.getAttribute("data-font-transitioning")).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("setEasyReadFont explicitly sets font preference", () => {
+    mockMatchMedia(false);
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+
+    fireEvent.click(screen.getByText("set-font-true"));
+    expect(screen.getByTestId("easy-read")).toHaveTextContent("true");
+    expect(localStorage.getItem(FONT_STORAGE_KEY)).toBe("true");
+  });
+
+  it("syncs easy-read font choice across tabs via storage events", () => {
+    vi.useFakeTimers();
+    mockMatchMedia(false);
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent("storage", {
+          key: FONT_STORAGE_KEY,
+          newValue: "true",
+        }),
+      );
+    });
+
+    expect(screen.getByTestId("easy-read")).toHaveTextContent("true");
+    expect(currentDataFont()).toBe("easy-read");
+    expect(document.documentElement.getAttribute("data-font-transitioning")).toBe("true");
+
+    act(() => {
+      vi.advanceTimersByTime(150);
+    });
+    expect(document.documentElement.getAttribute("data-font-transitioning")).toBeNull();
+    vi.useRealTimers();
   });
 });

@@ -26,6 +26,9 @@ export type Theme = "light" | "dark";
 /** `localStorage` key under which the user's explicit built-in theme is persisted. */
 export const THEME_STORAGE_KEY = "theme";
 
+/** `localStorage` key under which the user's explicit font choice is persisted. */
+export const FONT_STORAGE_KEY = "easy-read-font";
+
 /** `localStorage` key under which a registered custom theme is persisted. */
 export const CUSTOM_THEME_STORAGE_KEY = "theme:custom";
 
@@ -43,6 +46,16 @@ export function isTheme(value: unknown): value is Theme {
 }
 
 // ─── 2. Custom theme types ────────────────────────────────────────────────────
+
+/**
+ * Narrowing type guard for the easy-read font preference.
+ *
+ * @param value - Any candidate value.
+ * @returns `true` when value is boolean or boolean-string.
+ */
+export function isEasyReadFont(value: unknown): value is boolean {
+  return value === true || value === false || value === "true" || value === "false";
+}
 
 /**
  * The shape that third-party / org admin code passes to {@link registerTheme}.
@@ -106,6 +119,27 @@ function getStoredTheme(): Theme | null {
   }
 }
 
+/**
+ * Reads the persisted easy-read font preference, validating it against {@link isEasyReadFont}.
+ *
+ * @returns The stored boolean preference, or false when not present or invalid.
+ */
+export function getStoredFontPreference(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const stored = window.localStorage.getItem(FONT_STORAGE_KEY);
+    return isEasyReadFont(stored) ? stored === "true" || stored === true : false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolves the current operating-system colour-scheme preference.
+ *
+ * @returns `"dark"` when the OS prefers a dark scheme, otherwise `"light"`.
+ * Falls back to `"light"` in non-browser / SSR environments.
+ */
 function getSystemTheme(): Theme {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
     return "light";
@@ -172,6 +206,17 @@ export function applyTheme(theme: Theme | "custom"): void {
 }
 
 /**
+ * Applies the easy-read font preference to the document root. This is the **single place**
+ * in the app that mutates the `data-font` attribute.
+ *
+ * @param easyRead - A boolean indicating whether to use the easy-read font.
+ */
+export function applyFontPreference(easyRead: boolean): void {
+  if (typeof document === "undefined") return;
+  document.documentElement.setAttribute("data-font", easyRead ? "easy-read" : "default");
+}
+
+/**
  * Writes a set of validated token values as `--custom-*` CSS custom
  * properties directly on `<html>`.  These are picked up by the
  * `:root[data-theme="custom"]` block in `design-tokens.css`.
@@ -212,8 +257,9 @@ export function clearCustomTokens(): void {
 }
 
 /**
- * Resolves and applies the initial theme (built-in + custom if stored).
- * Called once from `main.tsx` before React renders to prevent FOUC.
+ * Resolves and applies the initial theme (built-in + custom if stored), and
+ * the initial font preference. Called once from `main.tsx` before React
+ * renders to prevent FOUC.
  */
 export function initTheme(): Theme {
   const theme = resolveInitialTheme();
@@ -226,6 +272,8 @@ export function initTheme(): Theme {
   }
 
   applyTheme(theme);
+  const easyRead = getStoredFontPreference();
+  applyFontPreference(easyRead);
   return theme;
 }
 
@@ -239,6 +287,12 @@ export interface ThemeContextValue {
   setTheme: (theme: Theme) => void;
   /** Flips between `"light"` and `"dark"`. */
   toggleTheme: () => void;
+  /** Whether the dyslexia-friendly "easy-read" font is active. */
+  easyReadFont: boolean;
+  /** Sets the dyslexia-friendly font preference explicitly. */
+  setEasyReadFont: (easyReadFont: boolean) => void;
+  /** Flips the easy-read font preference. */
+  toggleEasyReadFont: () => void;
 
   /** The currently registered custom theme, or `null`. */
   customTheme: RegisteredTheme | null;
@@ -285,9 +339,10 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 // ─── 6. Provider ─────────────────────────────────────────────────────────────
 
 /**
- * Provides theme state to the component tree.
+ * Provides theme state to the component tree, and keeps `data-theme` and
+ * `data-font` in sync.
  *
- * Extends the existing light/dark provider with a third dimension:
+ * Extends the light/dark/easy-read-font provider with a third dimension:
  * a validated custom branded theme.  The custom theme state machine is:
  *
  * ```
@@ -304,6 +359,11 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 export function ThemeProvider({ children }: { children: ReactNode }) {
   // ── built-in theme ──────────────────────────────────────────────────────────
   const [theme, setThemeState] = useState<Theme>(resolveInitialTheme);
+  const [easyReadFont, setEasyReadState] = useState<boolean>(getStoredFontPreference);
+
+  // Whether the user (in this tab or another) has explicitly picked a theme.
+  // While `false`, we keep following the OS preference. A ref keeps the latest
+  // value available to long-lived event listeners without re-subscribing.
   const hasExplicitChoiceRef = useRef<boolean>(getStoredTheme() !== null);
 
   // Mirror built-in theme to DOM (only when not in custom mode).
@@ -314,6 +374,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       applyTheme(theme);
     }
   }, [theme]);
+
+  useEffect(() => {
+    applyFontPreference(easyReadFont);
+  }, [easyReadFont]);
 
   const setTheme = useCallback((next: Theme) => {
     hasExplicitChoiceRef.current = true;
@@ -327,7 +391,30 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setTheme(theme === "light" ? "dark" : "light");
   }, [theme, setTheme]);
 
-  // Follow OS preference (while no explicit choice).
+  const setEasyReadFont = useCallback((next: boolean) => {
+    if (typeof document !== "undefined") {
+      document.documentElement.setAttribute("data-font-transitioning", "true");
+    }
+    try {
+      window.localStorage.setItem(FONT_STORAGE_KEY, String(next));
+    } catch {
+      // Ignore persistence failures.
+    }
+    setEasyReadState(next);
+    setTimeout(() => {
+      if (typeof document !== "undefined") {
+        document.documentElement.removeAttribute("data-font-transitioning");
+      }
+    }, 150);
+  }, []);
+
+  const toggleEasyReadFont = useCallback(() => {
+    setEasyReadFont(!easyReadFont);
+  }, [easyReadFont, setEasyReadFont]);
+
+  // Follow the OS colour-scheme preference, but only while the user has not
+  // made an explicit choice. Effects only run in the browser, so we only need
+  // to guard against environments where matchMedia itself is missing.
   useEffect(() => {
     if (typeof window.matchMedia !== "function") return undefined;
     const mq = window.matchMedia(DARK_MEDIA_QUERY);
@@ -345,22 +432,50 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   // Cross-tab sync.
   useEffect(() => {
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === THEME_STORAGE_KEY) {
-        if (e.newValue === null) {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === THEME_STORAGE_KEY) {
+        if (event.newValue === null) {
+          // Another tab cleared the choice → resume following the OS.
           hasExplicitChoiceRef.current = false;
           setThemeState(getSystemTheme());
           return;
         }
-        if (isTheme(e.newValue)) {
+
+        if (isTheme(event.newValue)) {
           hasExplicitChoiceRef.current = true;
-          setThemeState(e.newValue);
+          setThemeState(event.newValue);
+        }
+      } else if (event.key === FONT_STORAGE_KEY) {
+        if (event.newValue === null) {
+          if (typeof document !== "undefined") {
+            document.documentElement.setAttribute("data-font-transitioning", "true");
+          }
+          setEasyReadState(false);
+          setTimeout(() => {
+            if (typeof document !== "undefined") {
+              document.documentElement.removeAttribute("data-font-transitioning");
+            }
+          }, 150);
+          return;
+        }
+
+        if (event.newValue === "true" || event.newValue === "false") {
+          const nextVal = event.newValue === "true";
+          if (typeof document !== "undefined") {
+            document.documentElement.setAttribute("data-font-transitioning", "true");
+          }
+          setEasyReadState(nextVal);
+          setTimeout(() => {
+            if (typeof document !== "undefined") {
+              document.documentElement.removeAttribute("data-font-transitioning");
+            }
+          }, 150);
         }
       }
 
       // Another tab applied/cleared a custom theme.
-      if (e.key === CUSTOM_THEME_STORAGE_KEY) {
-        if (e.newValue === null) {
+      if (event.key === CUSTOM_THEME_STORAGE_KEY) {
+        if (event.newValue === null) {
           setCustomTheme(null);
           setCustomThemeState("default");
           clearCustomTokens();
@@ -509,6 +624,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       theme,
       setTheme,
       toggleTheme,
+      easyReadFont,
+      setEasyReadFont,
+      toggleEasyReadFont,
       customTheme,
       customThemeState,
       registrationErrors,
@@ -521,6 +639,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       theme,
       setTheme,
       toggleTheme,
+      easyReadFont,
+      setEasyReadFont,
+      toggleEasyReadFont,
       customTheme,
       customThemeState,
       registrationErrors,

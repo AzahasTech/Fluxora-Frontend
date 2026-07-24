@@ -371,25 +371,42 @@
    ═══════════════════════════════════════════════════════════ */
 
 :root {
-  --font-family-base:
-    "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-family-default: "Plus Jakarta Sans", system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+  --font-family-dyslexic: "Lexend", "OpenDyslexic", "Comic Neue", "Comic Sans MS", "Arial", sans-serif;
+
+  --font-family-base: var(--font-family-default);
   --font-family-mono: "Monaco", "Menlo", "Courier New", monospace;
 
+  /* Line Heights (Dynamic to allow easy-read scaling) */
+  --line-height-heading-1: 44px;
+  --line-height-heading-2: 32px;
+  --line-height-heading-3: 28px;
+  --line-height-heading-4: 24px;
+
+  --line-height-body-lg: 24px;
+  --line-height-body-md: 20px;
+  --line-height-body-sm: 16px;
+
+  --line-height-label-lg: 20px;
+  --line-height-label-md: 16px;
+  --line-height-label-sm: 14px;
+
   /* ─── Heading Scale ─── */
-  --font-heading-1: 500 36px / 44px var(--font-family-base);
-  --font-heading-2: 600 24px / 32px var(--font-family-base);
-  --font-heading-3: 600 18px / 28px var(--font-family-base);
-  --font-heading-4: 600 16px / 24px var(--font-family-base);
+  --font-heading-1: 500 36px / var(--line-height-heading-1) var(--font-family-base);
+  --font-heading-2: 600 24px / var(--line-height-heading-2) var(--font-family-base);
+  --font-heading-3: 600 18px / var(--line-height-heading-3) var(--font-family-base);
+  --font-heading-4: 600 16px / var(--line-height-heading-4) var(--font-family-base);
 
   /* ─── Body Scale ─── */
-  --font-body-lg: 400 16px / 24px var(--font-family-base);
-  --font-body-md: 400 14px / 20px var(--font-family-base);
-  --font-body-sm: 400 12px / 16px var(--font-family-base);
+  --font-body-lg: 400 16px / var(--line-height-body-lg) var(--font-family-base);
+  --font-body-md: 400 14px / var(--line-height-body-md) var(--font-family-base);
+  --font-body-sm: 400 12px / var(--line-height-body-sm) var(--font-family-base);
 
   /* ─── Labels & Controls ─── */
-  --font-label-lg: 500 14px / 20px var(--font-family-base);
-  --font-label-md: 500 12px / 16px var(--font-family-base);
-  --font-label-sm: 500 11px / 14px var(--font-family-base);
+  --font-label-lg: 500 14px / var(--line-height-label-lg) var(--font-family-base);
+  --font-label-md: 500 12px / var(--line-height-label-md) var(--font-family-base);
+  --font-label-sm: 500 11px / var(--line-height-label-sm) var(--font-family-base);
 
   /* ─── Code / Monospace ─── */
   --font-mono-sm: 400 12px / 16px var(--font-family-mono);
@@ -398,6 +415,40 @@
   --letter-spacing-tight: -0.01em;
   --letter-spacing-normal: 0;
   --letter-spacing-wide: 0.02em;
+}
+
+/* ─── Dyslexia-friendly typeface overrides (Opt-in) ─── */
+:root[data-font="easy-read"] {
+  --font-family-base: var(--font-family-dyslexic);
+
+  /* Looser letter spacing / tracking to prevent visual crowding */
+  --letter-spacing-tight: 0.02em;
+  --letter-spacing-normal: 0.05em;
+  --letter-spacing-wide: 0.08em;
+
+  /* Increased line spacing (approx 1.5 - 1.66x of font size) */
+  --line-height-heading-1: 54px; /* 36px * 1.5 = 54px */
+  --line-height-heading-2: 38px; /* 24px * 1.58 = 38px */
+  --line-height-heading-3: 30px; /* 18px * 1.66 = 30px */
+  --line-height-heading-4: 26px; /* 16px * 1.62 = 26px */
+
+  --line-height-body-lg: 26px;   /* 16px * 1.62 = 26px */
+  --line-height-body-md: 22px;   /* 14px * 1.57 = 22px */
+  --line-height-body-sm: 18px;   /* 12px * 1.5 = 18px */
+
+  --line-height-label-lg: 22px;  /* 14px * 1.57 = 22px */
+  --line-height-label-md: 18px;  /* 12px * 1.5 = 18px */
+  --line-height-label-sm: 17px;  /* 11px * 1.54 = 17px */
+}
+
+/* Smooth layout and typographic transition when toggling */
+:root[data-font-transitioning="true"],
+:root[data-font-transitioning="true"] * {
+  transition: font-family var(--transition-fast) ease-in-out,
+              line-height var(--transition-fast) ease-in-out,
+              letter-spacing var(--transition-fast) ease-in-out,
+              background-color var(--transition-fast) ease-in-out,
+              color var(--transition-fast) ease-in-out !important;
 }
 
 /* ═══════════════════════════════════════════════════════════
