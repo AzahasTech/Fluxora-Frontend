@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { VoiceMicButton } from "./voice/VoiceMicButton";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -25,6 +26,8 @@ interface SidebarProps {
   onToggleCollapse: () => void;
   mobileOpen: boolean;
   onMobileClose: () => void;
+  unreadCount?: number;
+  onResetUnread?: () => void;
 }
 
 export default function Sidebar({
@@ -32,6 +35,8 @@ export default function Sidebar({
   onToggleCollapse,
   mobileOpen,
   onMobileClose,
+  unreadCount = 0,
+  onResetUnread,
 }: SidebarProps) {
   const navigate = useNavigate();
   const [isMobile, setIsMobile] = useState(false);
@@ -182,7 +187,12 @@ export default function Sidebar({
                 key={item.to}
                 to={item.to}
                 end={item.end}
-                onClick={onMobileClose}
+                onClick={() => {
+                  onMobileClose();
+                  if (item.to === "/app/recipient") {
+                    onResetUnread?.();
+                  }
+                }}
                 aria-current="page"
                 className={({ isActive }) =>
                   cn(
@@ -216,6 +226,18 @@ export default function Sidebar({
                     >
                       {item.label}
                     </span>
+                    {item.to === "/app/recipient" && unreadCount > 0 && (
+                      <span
+                        data-testid="in-page-unread-badge"
+                        className={cn(
+                          "ml-auto flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-[var(--color-danger)] text-white text-[11px] font-bold leading-none shadow-sm transition-opacity duration-200",
+                          collapsed ? "md:hidden" : "opacity-100"
+                        )}
+                        aria-label={`${unreadCount > 9 ? "More than 9" : unreadCount} unread events`}
+                      >
+                        {unreadCount > 9 ? "9+" : unreadCount}
+                      </span>
+                    )}
                   </>
                 )}
               </NavLink>
@@ -244,6 +266,11 @@ export default function Sidebar({
                 </span>
               </a>
             ))}
+
+            {/* Voice Control Motor Accessibility Button */}
+            <div className="pt-2">
+              <VoiceMicButton variant="sidebar" />
+            </div>
 
             {/* Desktop Collapse Toggle */}
             <button
