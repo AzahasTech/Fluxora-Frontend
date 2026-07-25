@@ -749,3 +749,23 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   12. THEME TRANSITIONS
+   ═══════════════════════════════════════════════════════════ */
+
+html.theme-transitioning *,
+html.theme-transitioning *::before,
+html.theme-transitioning *::after {
+  transition-property: background-color, border-color, color, fill, stroke !important;
+  transition-duration: var(--transition-base) !important;
+  transition-timing-function: var(--ease-in-out) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.theme-transitioning *,
+  html.theme-transitioning *::before,
+  html.theme-transitioning *::after {
+    transition-duration: 0.01ms !important;
+  }
+}
