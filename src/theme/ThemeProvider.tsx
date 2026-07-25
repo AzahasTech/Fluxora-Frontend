@@ -16,8 +16,18 @@ import {
  */
 export type Theme = "light" | "dark";
 
+/**
+ * Valid font modes supported by the app.
+ * "default" uses Plus Jakarta Sans; "dyslexic" swaps to OpenDyslexic / Atkinson Hyperlegible
+ * with looser letter-spacing and line-height tokens.
+ */
+export type FontMode = "default" | "dyslexic";
+
 /** `localStorage` key under which the user's explicit theme choice is persisted. */
 export const THEME_STORAGE_KEY = "theme";
+
+/** `localStorage` key under which the user's explicit font mode choice is persisted. */
+export const FONT_STORAGE_KEY = "font-mode";
 
 /** Media query used to detect the operating-system colour-scheme preference. */
 const DARK_MEDIA_QUERY = "(prefers-color-scheme: dark)";
@@ -38,6 +48,19 @@ export function isTheme(value: unknown): value is Theme {
 }
 
 /**
+ * Narrowing type guard for {@link FontMode}.
+ *
+ * Single validation gate for untrusted font mode values (`localStorage`,
+ * cross-tab `storage` events). Rejects tampered strings before updating DOM.
+ *
+ * @param value - Any candidate value, typically a string read from storage.
+ * @returns `true` only when `value` is exactly `"default"` or `"dyslexic"`.
+ */
+export function isFontMode(value: unknown): value is FontMode {
+  return value === "default" || value === "dyslexic";
+}
+
+/**
  * Reads the persisted theme, validating it against {@link isTheme}.
  *
  * @returns The stored {@link Theme}, or `null` when nothing valid is stored
@@ -50,6 +73,21 @@ function getStoredTheme(): Theme | null {
     return isTheme(stored) ? stored : null;
   } catch {
     // Accessing localStorage can throw (Safari private mode, disabled storage).
+    return null;
+  }
+}
+
+/**
+ * Reads the persisted font mode, validating it against {@link isFontMode}.
+ *
+ * @returns The stored {@link FontMode}, or `null` when nothing valid is stored.
+ */
+function getStoredFontMode(): FontMode | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const stored = window.localStorage.getItem(FONT_STORAGE_KEY);
+    return isFontMode(stored) ? stored : null;
+  } catch {
     return null;
   }
 }
@@ -76,6 +114,13 @@ export function resolveInitialTheme(): Theme {
 }
 
 /**
+ * Computes the font mode to use on first paint: stored choice wins, else "default".
+ */
+export function resolveInitialFontMode(): FontMode {
+  return getStoredFontMode() ?? "default";
+}
+
+/**
  * Applies a theme to the document root. This is the **single place** in the
  * app that mutates the `data-theme` attribute.
  *
@@ -87,17 +132,40 @@ export function applyTheme(theme: Theme): void {
 }
 
 /**
+ * Applies a font mode to the document root (`data-font` attribute).
+ *
+ * @param mode - A validated {@link FontMode} to apply.
+ */
+export function applyFontMode(mode: FontMode): void {
+  if (typeof document === "undefined") return;
+  document.documentElement.setAttribute("data-font", mode);
+}
+
+/**
  * Resolves and applies the initial theme synchronously, before React renders.
  *
- * Call this once from the app entry point so the correct `data-theme` is set
- * ahead of the first paint, avoiding a flash of the wrong theme (FOUC).
+ * Call this once from the app entry point so the correct `data-theme` and `data-font` are set
+ * ahead of the first paint, avoiding a flash of the wrong theme or font (FOUC).
  *
  * @returns The {@link Theme} that was applied.
  */
 export function initTheme(): Theme {
   const theme = resolveInitialTheme();
   applyTheme(theme);
+  const fontMode = resolveInitialFontMode();
+  applyFontMode(fontMode);
   return theme;
+}
+
+/**
+ * Resolves and applies the initial font mode synchronously.
+ *
+ * @returns The {@link FontMode} that was applied.
+ */
+export function initFontMode(): FontMode {
+  const fontMode = resolveInitialFontMode();
+  applyFontMode(fontMode);
+  return fontMode;
 }
 
 /** Value exposed by {@link useTheme}. */
@@ -108,32 +176,40 @@ export interface ThemeContextValue {
   setTheme: (theme: Theme) => void;
   /** Flips between `"light"` and `"dark"` as an explicit choice. */
   toggleTheme: () => void;
+  /** The currently active font mode ("default" or "dyslexic"). */
+  fontMode: FontMode;
+  /** Sets an explicit font mode ("default" or "dyslexic"). */
+  setFontMode: (mode: FontMode) => void;
+  /** Flips between `"default"` and `"dyslexic"` as an explicit choice. */
+  toggleFontMode: () => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 /**
- * Provides theme state to the tree and keeps `data-theme` in sync from one
+ * Provides theme and font mode state to the tree and keeps DOM attributes in sync from one
  * place. Responsibilities:
  *
- * - Initialises from `localStorage`, falling back to the OS preference.
- * - Follows `prefers-color-scheme` changes **until** the user makes an explicit
- *   choice, after which the choice wins.
- * - Synchronises across tabs via the `storage` event.
- * - Validates every untrusted value through {@link isTheme}.
+ * - Initialises theme from `localStorage`, falling back to OS preference.
+ * - Initialises font mode from `localStorage`, falling back to `"default"`.
+ * - Synchronises theme and font mode across tabs via the `storage` event.
+ * - Validates every untrusted value through {@link isTheme} and {@link isFontMode}.
  */
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(resolveInitialTheme);
+  const [fontMode, setFontModeState] = useState<FontMode>(resolveInitialFontMode);
 
   // Whether the user (in this tab or another) has explicitly picked a theme.
-  // While `false`, we keep following the OS preference. A ref keeps the latest
-  // value available to long-lived event listeners without re-subscribing.
   const hasExplicitChoiceRef = useRef<boolean>(getStoredTheme() !== null);
 
-  // Single source of truth: mirror state to the DOM whenever it changes.
+  // Mirror state to the DOM whenever it changes.
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+
+  useEffect(() => {
+    applyFontMode(fontMode);
+  }, [fontMode]);
 
   const setTheme = useCallback((next: Theme) => {
     hasExplicitChoiceRef.current = true;
@@ -149,9 +225,20 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setTheme(theme === "light" ? "dark" : "light");
   }, [theme, setTheme]);
 
-  // Follow the OS colour-scheme preference, but only while the user has not
-  // made an explicit choice. Effects only run in the browser, so we only need
-  // to guard against environments where matchMedia itself is missing.
+  const setFontMode = useCallback((next: FontMode) => {
+    try {
+      window.localStorage.setItem(FONT_STORAGE_KEY, next);
+    } catch {
+      // Ignore persistence failures; in-memory state still updates the UI.
+    }
+    setFontModeState(next);
+  }, []);
+
+  const toggleFontMode = useCallback(() => {
+    setFontMode(fontMode === "default" ? "dyslexic" : "default");
+  }, [fontMode, setFontMode]);
+
+  // Follow the OS colour-scheme preference
   useEffect(() => {
     if (typeof window.matchMedia !== "function") {
       return undefined;
@@ -173,25 +260,30 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => mediaQuery.removeListener(handleChange);
   }, []);
 
-  // Cross-tab synchronisation. The `storage` event only fires in *other* tabs,
-  // so this reacts to choices made elsewhere. Effects are browser-only, so no
-  // SSR guard is needed here.
+  // Cross-tab synchronisation for theme and font mode
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
-      if (event.key !== THEME_STORAGE_KEY) return;
+      if (event.key === THEME_STORAGE_KEY) {
+        if (event.newValue === null) {
+          hasExplicitChoiceRef.current = false;
+          setThemeState(getSystemTheme());
+          return;
+        }
 
-      if (event.newValue === null) {
-        // Another tab cleared the choice → resume following the OS.
-        hasExplicitChoiceRef.current = false;
-        setThemeState(getSystemTheme());
-        return;
-      }
+        if (isTheme(event.newValue)) {
+          hasExplicitChoiceRef.current = true;
+          setThemeState(event.newValue);
+        }
+      } else if (event.key === FONT_STORAGE_KEY) {
+        if (event.newValue === null) {
+          setFontModeState("default");
+          return;
+        }
 
-      if (isTheme(event.newValue)) {
-        hasExplicitChoiceRef.current = true;
-        setThemeState(event.newValue);
+        if (isFontMode(event.newValue)) {
+          setFontModeState(event.newValue);
+        }
       }
-      // Invalid/tampered values are ignored — never applied to the DOM.
     };
 
     window.addEventListener("storage", handleStorage);
@@ -199,24 +291,18 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<ThemeContextValue>(
-    () => ({ theme, setTheme, toggleTheme }),
-    [theme, setTheme, toggleTheme],
+    () => ({ theme, setTheme, toggleTheme, fontMode, setFontMode, toggleFontMode }),
+    [theme, setTheme, toggleTheme, fontMode, setFontMode, toggleFontMode],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
 /**
- * Accesses the current theme and its mutators.
+ * Accesses the current theme, font mode, and their mutators.
  *
  * @throws If called outside of a {@link ThemeProvider}.
  * @returns The {@link ThemeContextValue} for the nearest provider.
- *
- * @example
- * ```tsx
- * const { theme, toggleTheme } = useTheme();
- * <button onClick={toggleTheme}>Switch to {theme === "light" ? "dark" : "light"}</button>
- * ```
  */
 export function useTheme(): ThemeContextValue {
   const context = useContext(ThemeContext);

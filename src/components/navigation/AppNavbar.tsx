@@ -146,7 +146,7 @@ export default function AppNavbar({
   onSidebarToggle,
   isSidebarOpen = false,
 }: AppNavbarProps) {
-  const { theme, toggleTheme } = useTheme();
+  const { theme, toggleTheme, fontMode, toggleFontMode } = useTheme();
   const {
     connected,
     address,
@@ -254,6 +254,23 @@ const location = useLocation();
             )}
           </button>
 
+          {/* Easy-read font toggle */}
+          <button
+            onClick={toggleFontMode}
+            aria-label={`Switch to ${fontMode === "default" ? "easy-read dyslexia-friendly" : "default"} font`}
+            aria-pressed={fontMode === "dyslexic"}
+            title={fontMode === "default" ? "Enable easy-read font" : "Disable easy-read font"}
+            className={`flex items-center justify-center min-h-[44px] min-w-[44px] px-2 rounded-full border transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${
+              fontMode === "dyslexic"
+                ? "border-[var(--accent)] text-[var(--accent)] bg-[var(--surface-elevated)]"
+                : "border-[var(--navbar-icon-border)] text-[var(--navbar-icon-color)] hover:border-[var(--accent)]/50 hover:text-[var(--accent)]"
+            }`}
+          >
+            <span className="font-bold text-xs tracking-wider uppercase" aria-hidden="true">
+              Aa
+            </span>
+          </button>
+
           {/* Wallet area */}
           {connecting ? (
             <ConnectingSkeleton />
@@ -335,6 +352,22 @@ const location = useLocation();
               ) : (
                 <Sun size={16} aria-hidden="true" />
               )}
+            </button>
+
+            <button
+              onClick={toggleFontMode}
+              aria-label={`Switch to ${fontMode === "default" ? "easy-read dyslexia-friendly" : "default"} font`}
+              aria-pressed={fontMode === "dyslexic"}
+              title={fontMode === "default" ? "Enable easy-read font" : "Disable easy-read font"}
+              className={`flex items-center justify-center min-h-[44px] min-w-[44px] px-2 rounded-full border transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${
+                fontMode === "dyslexic"
+                  ? "border-[var(--accent)] text-[var(--accent)] bg-[var(--surface-elevated)]"
+                  : "border-[var(--navbar-icon-border)] text-[var(--navbar-icon-color)] hover:border-[var(--accent)]/50 hover:text-[var(--accent)]"
+              }`}
+            >
+              <span className="font-bold text-xs tracking-wider uppercase" aria-hidden="true">
+                Aa
+              </span>
             </button>
 
             {connecting ? (

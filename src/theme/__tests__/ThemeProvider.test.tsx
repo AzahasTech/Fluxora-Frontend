@@ -5,10 +5,15 @@ import {
   ThemeProvider,
   useTheme,
   isTheme,
+  isFontMode,
   resolveInitialTheme,
+  resolveInitialFontMode,
   initTheme,
+  initFontMode,
   applyTheme,
+  applyFontMode,
   THEME_STORAGE_KEY,
+  FONT_STORAGE_KEY,
   type Theme,
 } from "../ThemeProvider";
 
@@ -56,22 +61,50 @@ function currentDataTheme(): string | null {
   return document.documentElement.getAttribute("data-theme");
 }
 
+/** Reads the font mode attribute on document root. */
+function currentDataFont(): string | null {
+  return document.documentElement.getAttribute("data-font");
+}
+
 /** Small consumer that surfaces the hook's values into the DOM. */
 function ThemeProbe() {
-  const { theme, setTheme, toggleTheme } = useTheme();
+  const { theme, setTheme, toggleTheme, fontMode, setFontMode, toggleFontMode } = useTheme();
   return (
     <div>
       <span data-testid="theme">{theme}</span>
+      <span data-testid="fontMode">{fontMode}</span>
       <button onClick={toggleTheme}>toggle</button>
       <button onClick={() => setTheme("dark")}>set-dark</button>
       <button onClick={() => setTheme("light")}>set-light</button>
+      <button onClick={toggleFontMode}>toggle-font</button>
+      <button onClick={() => setFontMode("dyslexic")}>set-font-dyslexic</button>
+      <button onClick={() => setFontMode("default")}>set-font-default</button>
     </div>
   );
 }
 
 beforeEach(() => {
-  localStorage.clear();
-  document.documentElement.removeAttribute("data-theme");
+  if (typeof window !== "undefined") {
+    if (!window.localStorage) {
+      const store: Record<string, string> = {};
+      Object.defineProperty(window, "localStorage", {
+        writable: true,
+        configurable: true,
+        value: {
+          getItem: (k: string) => store[k] ?? null,
+          setItem: (k: string, v: string) => { store[k] = String(v); },
+          removeItem: (k: string) => { delete store[k]; },
+          clear: () => { Object.keys(store).forEach(k => delete store[k]); },
+        },
+      });
+    } else {
+      window.localStorage.clear();
+    }
+  }
+  if (typeof document !== "undefined" && document.documentElement) {
+    document.documentElement.removeAttribute("data-theme");
+    document.documentElement.removeAttribute("data-font");
+  }
 });
 
 afterEach(() => {
@@ -449,7 +482,226 @@ describe("useTheme", () => {
     });
     const value: Theme = result.current.theme;
     expect(value).toBe("light");
+    expect(result.current.fontMode).toBe("default");
     expect(typeof result.current.setTheme).toBe("function");
     expect(typeof result.current.toggleTheme).toBe("function");
+    expect(typeof result.current.setFontMode).toBe("function");
+    expect(typeof result.current.toggleFontMode).toBe("function");
+  });
+});
+
+// ─── Font Mode Unit Tests ────────────────────────────────────────────────────
+
+describe("isFontMode", () => {
+  it("accepts only 'default' and 'dyslexic'", () => {
+    expect(isFontMode("default")).toBe(true);
+    expect(isFontMode("dyslexic")).toBe(true);
+  });
+
+  it("rejects tampered / invalid values (security gate)", () => {
+    for (const bad of [
+      "Dyslexic",
+      "default ",
+      "",
+      "arial",
+      "dyslexic\" onload=alert(1)",
+      null,
+      undefined,
+      123,
+      {},
+    ]) {
+      expect(isFontMode(bad)).toBe(false);
+    }
+  });
+});
+
+describe("resolveInitialFontMode", () => {
+  it("returns stored font mode when valid", () => {
+    localStorage.setItem(FONT_STORAGE_KEY, "dyslexic");
+    expect(resolveInitialFontMode()).toBe("dyslexic");
+  });
+
+  it("falls back to 'default' when nothing is stored", () => {
+    expect(resolveInitialFontMode()).toBe("default");
+  });
+
+  it("falls back to 'default' when stored value is invalid", () => {
+    localStorage.setItem(FONT_STORAGE_KEY, "invalid-font");
+    expect(resolveInitialFontMode()).toBe("default");
+  });
+
+  it("returns 'default' when window is undefined (SSR safety)", () => {
+    vi.stubGlobal("window", undefined);
+    try {
+      expect(resolveInitialFontMode()).toBe("default");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe("applyFontMode / initFontMode", () => {
+  it("applyFontMode sets data-font attribute on document root", () => {
+    applyFontMode("dyslexic");
+    expect(currentDataFont()).toBe("dyslexic");
+
+    applyFontMode("default");
+    expect(currentDataFont()).toBe("default");
+  });
+
+  it("initFontMode resolves initial font mode and applies data-font", () => {
+    localStorage.setItem(FONT_STORAGE_KEY, "dyslexic");
+    const applied = initFontMode();
+    expect(applied).toBe("dyslexic");
+    expect(currentDataFont()).toBe("dyslexic");
+  });
+
+  it("applyFontMode is a no-op when document is undefined", () => {
+    vi.stubGlobal("document", undefined);
+    try {
+      expect(() => applyFontMode("dyslexic")).not.toThrow();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe("Font Mode Provider & Sync Behavior", () => {
+  it("initializes font mode from stored preference", () => {
+    localStorage.setItem(FONT_STORAGE_KEY, "dyslexic");
+    mockMatchMedia(false);
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+
+    expect(screen.getByTestId("fontMode")).toHaveTextContent("dyslexic");
+    expect(currentDataFont()).toBe("dyslexic");
+  });
+
+  it("toggleFontMode switches between default and dyslexic mode and persists choice", async () => {
+    const user = userEvent.setup();
+    mockMatchMedia(false);
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+
+    expect(screen.getByTestId("fontMode")).toHaveTextContent("default");
+    expect(currentDataFont()).toBe("default");
+
+    await user.click(screen.getByText("toggle-font"));
+    expect(screen.getByTestId("fontMode")).toHaveTextContent("dyslexic");
+    expect(currentDataFont()).toBe("dyslexic");
+    expect(localStorage.getItem(FONT_STORAGE_KEY)).toBe("dyslexic");
+
+    await user.click(screen.getByText("toggle-font"));
+    expect(screen.getByTestId("fontMode")).toHaveTextContent("default");
+    expect(currentDataFont()).toBe("default");
+    expect(localStorage.getItem(FONT_STORAGE_KEY)).toBe("default");
+  });
+
+  it("setFontMode explicitly sets font mode state", async () => {
+    const user = userEvent.setup();
+    mockMatchMedia(false);
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+
+    await user.click(screen.getByText("set-font-dyslexic"));
+    expect(screen.getByTestId("fontMode")).toHaveTextContent("dyslexic");
+    expect(localStorage.getItem(FONT_STORAGE_KEY)).toBe("dyslexic");
+
+    await user.click(screen.getByText("set-font-default"));
+    expect(screen.getByTestId("fontMode")).toHaveTextContent("default");
+    expect(localStorage.getItem(FONT_STORAGE_KEY)).toBe("default");
+  });
+
+  it("does not throw when font mode persistence fails", async () => {
+    const user = userEvent.setup();
+    mockMatchMedia(false);
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+
+    const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("quota exceeded");
+    });
+
+    await user.click(screen.getByText("set-font-dyslexic"));
+    expect(screen.getByTestId("fontMode")).toHaveTextContent("dyslexic");
+    spy.mockRestore();
+  });
+
+  it("syncs valid fontMode updates across tabs via storage event", () => {
+    mockMatchMedia(false);
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent("storage", {
+          key: FONT_STORAGE_KEY,
+          newValue: "dyslexic",
+        }),
+      );
+    });
+
+    expect(screen.getByTestId("fontMode")).toHaveTextContent("dyslexic");
+    expect(currentDataFont()).toBe("dyslexic");
+  });
+
+  it("resets to default font mode when another tab clears font storage choice", () => {
+    localStorage.setItem(FONT_STORAGE_KEY, "dyslexic");
+    mockMatchMedia(false);
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+
+    expect(screen.getByTestId("fontMode")).toHaveTextContent("dyslexic");
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent("storage", {
+          key: FONT_STORAGE_KEY,
+          newValue: null,
+        }),
+      );
+    });
+
+    expect(screen.getByTestId("fontMode")).toHaveTextContent("default");
+    expect(currentDataFont()).toBe("default");
+  });
+
+  it("ignores invalid or tampered font values from storage events", () => {
+    mockMatchMedia(false);
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent("storage", {
+          key: FONT_STORAGE_KEY,
+          newValue: "dyslexic<script>alert(1)</script>",
+        }),
+      );
+    });
+
+    expect(screen.getByTestId("fontMode")).toHaveTextContent("default");
+    expect(currentDataFont()).toBe("default");
   });
 });

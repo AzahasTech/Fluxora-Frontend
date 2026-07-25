@@ -37,10 +37,18 @@ vi.mock("react-router-dom", () => ({
 }));
 
 beforeEach(() => {
+  vi.stubGlobal("localStorage", {
+    store: {} as Record<string, string>,
+    getItem(key: string) { return this.store[key] || null; },
+    setItem(key: string, value: string) { this.store[key] = String(value); },
+    removeItem(key: string) { delete this.store[key]; },
+    clear() { this.store = {}; },
+  });
   vi.useFakeTimers();
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   vi.useRealTimers();
 });
 

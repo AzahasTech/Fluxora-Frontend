@@ -370,10 +370,20 @@
    3. TYPOGRAPHY TOKENS
    ═══════════════════════════════════════════════════════════ */
 
+/* ═══════════════════════════════════════════════════════════
+   3. TYPOGRAPHY TOKENS
+   ═══════════════════════════════════════════════════════════ */
+
 :root {
   --font-family-base: "Plus Jakarta Sans", system-ui, -apple-system,
     "Segoe UI", sans-serif;
+  --font-family-dyslexic: "OpenDyslexic", "Atkinson Hyperlegible", "Comic Sans MS", Arial, sans-serif;
   --font-family-mono: "Monaco", "Menlo", "Courier New", monospace;
+
+  /* ─── Line Height Tokens ─── */
+  --line-height-base: 1.5;
+  --line-height-relaxed: 1.625;
+  --line-height-loose: 1.75;
 
   /* ─── Heading Scale ─── */
   --font-heading-1: 500 36px / 44px var(--font-family-base);
@@ -398,6 +408,35 @@
   --letter-spacing-tight: -0.01em;
   --letter-spacing-normal: 0;
   --letter-spacing-wide: 0.02em;
+}
+
+/* ─── Dyslexia-Friendly Font Overrides (data-font="dyslexic") ─── */
+:root[data-font="dyslexic"] {
+  --font-family-base: var(--font-family-dyslexic);
+
+  /* Looser letter spacing for enhanced tracking & character differentiation */
+  --letter-spacing-tight: 0em;
+  --letter-spacing-normal: 0.03em;
+  --letter-spacing-wide: 0.06em;
+
+  /* Looser line heights to reduce visual crowding */
+  --line-height-base: 1.6;
+  --line-height-relaxed: 1.75;
+  --line-height-loose: 1.85;
+
+  /* Adjusted typography scale with expanded line heights */
+  --font-heading-1: 500 36px / 48px var(--font-family-base);
+  --font-heading-2: 600 24px / 36px var(--font-family-base);
+  --font-heading-3: 600 18px / 30px var(--font-family-base);
+  --font-heading-4: 600 16px / 26px var(--font-family-base);
+
+  --font-body-lg: 400 16px / 28px var(--font-family-base);
+  --font-body-md: 400 14px / 24px var(--font-family-base);
+  --font-body-sm: 400 12px / 18px var(--font-family-base);
+
+  --font-label-lg: 500 14px / 22px var(--font-family-base);
+  --font-label-md: 500 12px / 18px var(--font-family-base);
+  --font-label-sm: 500 11px / 16px var(--font-family-base);
 }
 
 /* ═══════════════════════════════════════════════════════════
