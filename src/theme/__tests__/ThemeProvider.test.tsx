@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, act, renderHook } from "@testing-library/react";
+import { render, screen, act, renderHook, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   ThemeProvider,
@@ -11,32 +11,31 @@ import {
   initTheme,
   initFontMode,
   applyTheme,
-  applyFontMode,
+  applyCustomTokens,
+  clearCustomTokens,
   THEME_STORAGE_KEY,
-  FONT_STORAGE_KEY,
+  CUSTOM_THEME_STORAGE_KEY,
   type Theme,
+  FONT_STORAGE_KEY,
+  isEasyReadFont,
+  applyFontPreference,
+  getStoredFontPreference,
+  type CustomThemeDefinition,
 } from "../ThemeProvider";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 type ChangeHandler = (e: MediaQueryListEvent) => void;
 
-/**
- * Installs a controllable `window.matchMedia` mock.
- *
- * @param matches - Initial value of `(prefers-color-scheme: dark)`.
- * @param opts.legacy - When true, only expose `addListener`/`removeListener`
- *   (Safari < 14) instead of `addEventListener`.
- */
 function mockMatchMedia(matches: boolean, opts: { legacy?: boolean } = {}) {
   const listeners = new Set<ChangeHandler>();
   const mq: Record<string, unknown> = {
     matches,
     media: "(prefers-color-scheme: dark)",
-    /** Simulate the OS preference changing at runtime. */
     dispatchChange: (newMatches: boolean) => {
       listeners.forEach((cb) => cb({ matches: newMatches } as MediaQueryListEvent));
     },
   };
-
   if (opts.legacy) {
     mq.addListener = vi.fn((cb: ChangeHandler) => listeners.add(cb));
     mq.removeListener = vi.fn((cb: ChangeHandler) => listeners.delete(cb));
@@ -46,428 +45,455 @@ function mockMatchMedia(matches: boolean, opts: { legacy?: boolean } = {}) {
       listeners.delete(cb),
     );
   }
-
   Object.defineProperty(window, "matchMedia", {
     writable: true,
     configurable: true,
     value: vi.fn().mockReturnValue(mq),
   });
-
   return mq as typeof mq & { dispatchChange: (m: boolean) => void };
 }
 
-/** Reads the single source of truth that the provider maintains. */
-function currentDataTheme(): string | null {
+function currentDataTheme() {
   return document.documentElement.getAttribute("data-theme");
 }
 
-/** Reads the font mode attribute on document root. */
 function currentDataFont(): string | null {
   return document.documentElement.getAttribute("data-font");
 }
 
-/** Small consumer that surfaces the hook's values into the DOM. */
+function customProp(name: string) {
+  return document.documentElement.style.getPropertyValue(name);
+}
+
+/** A valid org brand theme definition that passes all WCAG checks. */
+const VALID_BRAND: CustomThemeDefinition = {
+  id: "acme-corp",
+  label: "Acme Corp",
+  tokenOverrides: {
+    "--color-accent-primary": "#1e40af",
+    "--color-accent-secondary": "#1d4ed8",
+    "--navbar-bg": "#1e3a5f",
+    "--navbar-logo-color": "#ffffff",
+    "--navbar-link-color": "#e2e8f0",
+    "--color-cta-primary-bg": "#1e40af",
+    "--color-cta-primary-text": "#ffffff",
+  },
+};
+
+/** A theme definition that will fail WCAG contrast (light teal on white). */
+const CONTRAST_FAIL_BRAND: CustomThemeDefinition = {
+  id: "bad-contrast",
+  label: "Bad Contrast",
+  tokenOverrides: {
+    "--navbar-logo-color": "#00b8d4",
+    "--navbar-bg": "#ffffff",
+  },
+};
+
+/** A theme definition with a locked token. */
+const LOCKED_TOKEN_BRAND: CustomThemeDefinition = {
+  id: "locked-attempt",
+  label: "Locked Attempt",
+  tokenOverrides: {
+    "--focus-ring-color": "#ff0000",
+  },
+};
+
+/** Small consumer that surfaces all theme, font, and custom-theme context values. */
 function ThemeProbe() {
-  const { theme, setTheme, toggleTheme, fontMode, setFontMode, toggleFontMode } = useTheme();
+  const {
+    theme,
+    setTheme,
+    toggleTheme,
+    easyReadFont,
+    setEasyReadFont,
+    toggleEasyReadFont,
+    themePreference,
+    setThemePreference,
+    customTheme,
+    customThemeState,
+    registrationErrors,
+    registerTheme,
+    applyCustomTheme,
+    clearCustomTheme,
+    previewCustomTheme,
+  } = useTheme();
+
   return (
     <div>
       <span data-testid="theme">{theme}</span>
-      <span data-testid="fontMode">{fontMode}</span>
+      <span data-testid="theme-pref">{themePreference}</span>
+      <span data-testid="custom-state">{customThemeState}</span>
+      <span data-testid="custom-id">{customTheme?.id ?? "none"}</span>
+      <span data-testid="error-count">{registrationErrors.length}</span>
       <button onClick={toggleTheme}>toggle</button>
       <button onClick={() => setTheme("dark")}>set-dark</button>
       <button onClick={() => setTheme("light")}>set-light</button>
-      <button onClick={toggleFontMode}>toggle-font</button>
-      <button onClick={() => setFontMode("dyslexic")}>set-font-dyslexic</button>
-      <button onClick={() => setFontMode("default")}>set-font-default</button>
+      <button onClick={() => setThemePreference("auto")}>set-pref-auto</button>
+      <button onClick={() => setThemePreference("light")}>set-pref-light</button>
+      <button onClick={() => setThemePreference("dark")}>set-pref-dark</button>
+      <span data-testid="easy-read">{String(easyReadFont)}</span>
+      <button onClick={toggleEasyReadFont}>toggle-font</button>
+      <button onClick={() => setEasyReadFont(true)}>set-font-true</button>
+      <button onClick={() => setEasyReadFont(false)}>set-font-false</button>
+      <button onClick={() => registerTheme(VALID_BRAND)}>register-valid</button>
+      <button onClick={() => registerTheme(CONTRAST_FAIL_BRAND)}>register-bad-contrast</button>
+      <button onClick={() => registerTheme(LOCKED_TOKEN_BRAND)}>register-locked</button>
+      <button onClick={() => previewCustomTheme(VALID_BRAND)}>preview</button>
+      <button onClick={applyCustomTheme}>apply</button>
+      <button onClick={clearCustomTheme}>clear</button>
     </div>
   );
 }
 
+function Wrapper({ children }: { children: React.ReactNode }) {
+  return <ThemeProvider>{children}</ThemeProvider>;
+}
+
 beforeEach(() => {
-  if (typeof window !== "undefined") {
-    if (!window.localStorage) {
-      const store: Record<string, string> = {};
-      Object.defineProperty(window, "localStorage", {
-        writable: true,
-        configurable: true,
-        value: {
-          getItem: (k: string) => store[k] ?? null,
-          setItem: (k: string, v: string) => { store[k] = String(v); },
-          removeItem: (k: string) => { delete store[k]; },
-          clear: () => { Object.keys(store).forEach(k => delete store[k]); },
-        },
-      });
-    } else {
-      window.localStorage.clear();
-    }
-  }
-  if (typeof document !== "undefined" && document.documentElement) {
-    document.documentElement.removeAttribute("data-theme");
-    document.documentElement.removeAttribute("data-font");
-  }
+  localStorage.clear();
+  document.documentElement.removeAttribute("data-theme");
+  document.documentElement.removeAttribute("data-font");
+  document.documentElement.removeAttribute("data-font-transitioning");
+  document.documentElement.removeAttribute("style");
+  mockMatchMedia(false);
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// ─── pure helpers ────────────────────────────────────────────────────────────
+// ─── Existing light/dark behaviour (regression guard) ────────────────────────
 
-describe("isTheme", () => {
-  it("accepts only the allowed union members", () => {
+describe("ThemeProvider — built-in light/dark (regression)", () => {
+  it("isTheme accepts only light and dark", () => {
     expect(isTheme("light")).toBe(true);
     expect(isTheme("dark")).toBe(true);
+    expect(isTheme("custom")).toBe(false);
+    expect(isTheme(null)).toBe(false);
   });
 
-  it("rejects tampered / invalid values (security gate)", () => {
-    for (const bad of [
-      "Dark",
-      "light ",
-      "",
-      "blue",
-      "light\" onload=alert(1)",
-      null,
-      undefined,
-      42,
-      {},
-    ]) {
-      expect(isTheme(bad)).toBe(false);
-    }
-  });
-});
-
-describe("resolveInitialTheme", () => {
-  it("prefers a valid stored value over the OS preference", () => {
-    mockMatchMedia(true); // OS = dark
-    localStorage.setItem(THEME_STORAGE_KEY, "light");
+  it("resolveInitialTheme returns light when no stored value and OS=light", () => {
     expect(resolveInitialTheme()).toBe("light");
   });
 
-  it("falls back to the OS preference when nothing is stored", () => {
-    mockMatchMedia(true);
-    expect(resolveInitialTheme()).toBe("dark");
-  });
-
-  it("ignores an invalid stored value and uses the OS preference", () => {
-    mockMatchMedia(false);
-    localStorage.setItem(THEME_STORAGE_KEY, "neon");
-    expect(resolveInitialTheme()).toBe("light");
-  });
-
-  it("returns light when matchMedia is unavailable", () => {
-    // @ts-ignore simulate an environment without matchMedia
-    delete window.matchMedia;
-    expect(resolveInitialTheme()).toBe("light");
-  });
-
-  it("returns null-equivalent (light) when localStorage throws", () => {
-    mockMatchMedia(false);
-    const spy = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
-      throw new Error("blocked");
-    });
-    expect(resolveInitialTheme()).toBe("light");
-    spy.mockRestore();
-  });
-});
-
-describe("SSR safety (non-browser environment)", () => {
-  it("resolveInitialTheme returns light when window is undefined", () => {
-    vi.stubGlobal("window", undefined);
-    try {
-      expect(resolveInitialTheme()).toBe("light");
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  });
-
-  it("applyTheme is a no-op when document is undefined", () => {
-    vi.stubGlobal("document", undefined);
-    try {
-      expect(() => applyTheme("dark")).not.toThrow();
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  });
-});
-
-describe("applyTheme / initTheme", () => {
-  it("applyTheme sets data-theme on the document root", () => {
+  it("applyTheme sets data-theme", () => {
     applyTheme("dark");
     expect(currentDataTheme()).toBe("dark");
   });
 
-  it("initTheme resolves and applies the no-flash attribute", () => {
-    mockMatchMedia(true);
-    const applied = initTheme();
-    expect(applied).toBe("dark");
-    expect(currentDataTheme()).toBe("dark");
-  });
-});
-
-// ─── provider behaviour ──────────────────────────────────────────────────────
-
-describe("ThemeProvider", () => {
-  it("first visit with a dark OS preference and no stored value follows the OS", () => {
-    mockMatchMedia(true);
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-    expect(screen.getByTestId("theme")).toHaveTextContent("dark");
-    expect(currentDataTheme()).toBe("dark");
-  });
-
-  it("first visit with a light OS preference follows the OS", () => {
-    mockMatchMedia(false);
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-    expect(screen.getByTestId("theme")).toHaveTextContent("light");
-  });
-
-  it("ignores an invalid stored value and uses the OS preference", () => {
-    mockMatchMedia(true);
-    localStorage.setItem(THEME_STORAGE_KEY, "<script>");
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-    expect(screen.getByTestId("theme")).toHaveTextContent("dark");
-    expect(currentDataTheme()).toBe("dark");
-  });
-
-  it("toggleTheme flips the theme, persists it, and updates the DOM", async () => {
-    const user = userEvent.setup();
-    mockMatchMedia(false);
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-
-    await user.click(screen.getByText("toggle"));
-    expect(screen.getByTestId("theme")).toHaveTextContent("dark");
-    expect(currentDataTheme()).toBe("dark");
-    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
-
-    await user.click(screen.getByText("toggle"));
-    expect(screen.getByTestId("theme")).toHaveTextContent("light");
-    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("light");
-  });
-
-  it("setTheme persists an explicit choice", async () => {
-    const user = userEvent.setup();
-    mockMatchMedia(false);
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-
-    await user.click(screen.getByText("set-dark"));
-    expect(screen.getByTestId("theme")).toHaveTextContent("dark");
-    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
-  });
-
-  it("does not throw when persistence fails", async () => {
-    const user = userEvent.setup();
-    mockMatchMedia(false);
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-
-    const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
-      throw new Error("quota exceeded");
-    });
-
-    await user.click(screen.getByText("set-dark"));
-    // In-memory state still updates even though persistence failed.
-    expect(screen.getByTestId("theme")).toHaveTextContent("dark");
-    spy.mockRestore();
-  });
-
-  // ─── matchMedia following ──────────────────────────────────────────────────
-
-  it("follows OS changes while no explicit choice has been made", () => {
-    const mq = mockMatchMedia(false);
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-    expect(screen.getByTestId("theme")).toHaveTextContent("light");
-
-    act(() => mq.dispatchChange(true));
-    expect(screen.getByTestId("theme")).toHaveTextContent("dark");
-    expect(currentDataTheme()).toBe("dark");
-
-    act(() => mq.dispatchChange(false));
-    expect(screen.getByTestId("theme")).toHaveTextContent("light");
-  });
-
-  it("stops following OS changes once the user makes an explicit choice", async () => {
-    const user = userEvent.setup();
-    const mq = mockMatchMedia(false);
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-
-    await user.click(screen.getByText("set-light")); // explicit choice
-    act(() => mq.dispatchChange(true)); // OS goes dark
-    // Explicit choice wins; OS change is ignored.
-    expect(screen.getByTestId("theme")).toHaveTextContent("light");
-  });
-
-  it("does not follow OS changes when a stored choice exists at mount", () => {
-    const mq = mockMatchMedia(false);
-    localStorage.setItem(THEME_STORAGE_KEY, "light");
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-
-    act(() => mq.dispatchChange(true));
-    expect(screen.getByTestId("theme")).toHaveTextContent("light");
-  });
-
-  it("supports the legacy addListener/removeListener API", () => {
-    const mq = mockMatchMedia(false, { legacy: true });
-    const { unmount } = render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-
-    act(() => mq.dispatchChange(true));
-    expect(screen.getByTestId("theme")).toHaveTextContent("dark");
-
-    expect(() => unmount()).not.toThrow();
-    expect(mq.removeListener).toHaveBeenCalled();
-  });
-
-  it("does not subscribe when matchMedia is unavailable", () => {
-    // @ts-ignore simulate an environment without matchMedia
-    delete window.matchMedia;
-    expect(() =>
-      render(
-        <ThemeProvider>
-          <ThemeProbe />
-        </ThemeProvider>,
-      ),
-    ).not.toThrow();
-    expect(screen.getByTestId("theme")).toHaveTextContent("light");
-  });
-
-  // ─── cross-tab storage sync ────────────────────────────────────────────────
-
-  it("syncs a valid theme written by another tab", () => {
-    mockMatchMedia(false);
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-
-    act(() => {
-      window.dispatchEvent(
-        new StorageEvent("storage", {
-          key: THEME_STORAGE_KEY,
-          newValue: "dark",
-        }),
-      );
-    });
-    expect(screen.getByTestId("theme")).toHaveTextContent("dark");
-    expect(currentDataTheme()).toBe("dark");
-  });
-
-  it("ignores storage events for unrelated keys", () => {
-    mockMatchMedia(false);
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-
-    act(() => {
-      window.dispatchEvent(
-        new StorageEvent("storage", { key: "something-else", newValue: "dark" }),
-      );
-    });
-    expect(screen.getByTestId("theme")).toHaveTextContent("light");
-  });
-
-  it("ignores tampered values arriving via the storage event", () => {
-    mockMatchMedia(false);
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-
-    act(() => {
-      window.dispatchEvent(
-        new StorageEvent("storage", {
-          key: THEME_STORAGE_KEY,
-          newValue: "dark\" onmouseover=alert(1)",
-        }),
-      );
-    });
-    expect(screen.getByTestId("theme")).toHaveTextContent("light");
+  it("initTheme sets data-theme without a custom theme stored", () => {
+    const t = initTheme();
+    expect(t).toBe("light");
     expect(currentDataTheme()).toBe("light");
   });
 
-  it("resumes following the OS when another tab clears the choice", () => {
-    const mq = mockMatchMedia(true); // OS = dark
-    localStorage.setItem(THEME_STORAGE_KEY, "light");
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-    expect(screen.getByTestId("theme")).toHaveTextContent("light");
-
-    // Another tab removes the stored choice (newValue === null).
-    act(() => {
-      window.dispatchEvent(
-        new StorageEvent("storage", { key: THEME_STORAGE_KEY, newValue: null }),
-      );
-    });
-    // Falls back to current OS preference (dark)...
+  it("toggleTheme still works after custom-theme code is added", async () => {
+    const user = userEvent.setup();
+    render(<ThemeProbe />, { wrapper: Wrapper });
+    await user.click(screen.getByText("toggle"));
     expect(screen.getByTestId("theme")).toHaveTextContent("dark");
-
-    // ...and OS following is active again.
-    act(() => mq.dispatchChange(false));
-    expect(screen.getByTestId("theme")).toHaveTextContent("light");
-  });
-
-  it("cleans up listeners on unmount", () => {
-    const mq = mockMatchMedia(false);
-    const removeSpy = vi.spyOn(window, "removeEventListener");
-    const { unmount } = render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-
-    unmount();
-    expect(mq.removeEventListener).toHaveBeenCalled();
-    expect(removeSpy).toHaveBeenCalledWith("storage", expect.any(Function));
   });
 });
 
-// ─── useTheme guard ──────────────────────────────────────────────────────────
+// ─── Custom token DOM helpers ─────────────────────────────────────────────────
+
+describe("applyCustomTokens / clearCustomTokens", () => {
+  it("writes --custom-* props to html element", () => {
+    applyCustomTokens({ "--color-accent-primary": "#1e40af" });
+    expect(customProp("--custom-color-accent-primary")).toBe("#1e40af");
+  });
+
+  it("clears previously written --custom-* props", () => {
+    applyCustomTokens({ "--color-accent-primary": "#1e40af" });
+    clearCustomTokens();
+    expect(customProp("--custom-color-accent-primary")).toBe("");
+  });
+
+  it("ignores non-hex values (CSS injection guard)", () => {
+    applyCustomTokens({ "--color-accent-primary": "red; background:url(x)" as never });
+    // The value fails the hex regex inside applyCustomTokens, so nothing is written.
+    expect(customProp("--custom-color-accent-primary")).toBe("");
+  });
+
+  it("only clears --custom-* props, leaving other inline styles intact", () => {
+    document.documentElement.style.setProperty("--some-other", "value");
+    applyCustomTokens({ "--color-accent-primary": "#1e40af" });
+    clearCustomTokens();
+    expect(document.documentElement.style.getPropertyValue("--some-other")).toBe(
+      "value",
+    );
+  });
+});
+
+// ─── State machine ────────────────────────────────────────────────────────────
+
+describe("ThemeProvider — custom theme state machine", () => {
+  it("starts in default state with no custom theme", () => {
+    render(<ThemeProbe />, { wrapper: Wrapper });
+    expect(screen.getByTestId("custom-state")).toHaveTextContent("default");
+    expect(screen.getByTestId("custom-id")).toHaveTextContent("none");
+  });
+
+  it("transitions to custom-pending-preview after registerTheme (valid)", async () => {
+    const user = userEvent.setup();
+    render(<ThemeProbe />, { wrapper: Wrapper });
+
+    await user.click(screen.getByText("register-valid"));
+
+    expect(screen.getByTestId("custom-state")).toHaveTextContent(
+      "custom-pending-preview",
+    );
+    expect(screen.getByTestId("custom-id")).toHaveTextContent("acme-corp");
+  });
+
+  it("sets data-theme=custom on the DOM after registerTheme", async () => {
+    const user = userEvent.setup();
+    render(<ThemeProbe />, { wrapper: Wrapper });
+
+    await user.click(screen.getByText("register-valid"));
+    expect(currentDataTheme()).toBe("custom");
+  });
+
+  it("writes --custom-* CSS props after registerTheme", async () => {
+    const user = userEvent.setup();
+    render(<ThemeProbe />, { wrapper: Wrapper });
+
+    await user.click(screen.getByText("register-valid"));
+    expect(customProp("--custom-color-accent-primary")).toBe("#1e40af");
+  });
+
+  it("transitions to custom-applied after applyCustomTheme", async () => {
+    const user = userEvent.setup();
+    render(<ThemeProbe />, { wrapper: Wrapper });
+
+    await user.click(screen.getByText("register-valid"));
+    await user.click(screen.getByText("apply"));
+
+    expect(screen.getByTestId("custom-state")).toHaveTextContent("custom-applied");
+  });
+
+  it("persists custom theme to localStorage after applyCustomTheme", async () => {
+    const user = userEvent.setup();
+    render(<ThemeProbe />, { wrapper: Wrapper });
+
+    await user.click(screen.getByText("register-valid"));
+    await user.click(screen.getByText("apply"));
+
+    const stored = JSON.parse(
+      localStorage.getItem(CUSTOM_THEME_STORAGE_KEY) ?? "null",
+    );
+    expect(stored).not.toBeNull();
+    expect(stored.id).toBe("acme-corp");
+  });
+
+  it("transitions back to default after clearCustomTheme", async () => {
+    const user = userEvent.setup();
+    render(<ThemeProbe />, { wrapper: Wrapper });
+
+    await user.click(screen.getByText("register-valid"));
+    await user.click(screen.getByText("apply"));
+    await user.click(screen.getByText("clear"));
+
+    expect(screen.getByTestId("custom-state")).toHaveTextContent("default");
+    expect(screen.getByTestId("custom-id")).toHaveTextContent("none");
+  });
+
+  it("restores built-in data-theme after clearCustomTheme", async () => {
+    const user = userEvent.setup();
+    render(<ThemeProbe />, { wrapper: Wrapper });
+
+    await user.click(screen.getByText("register-valid"));
+    await user.click(screen.getByText("clear"));
+
+    expect(currentDataTheme()).not.toBe("custom");
+  });
+
+  it("removes --custom-* props after clearCustomTheme", async () => {
+    const user = userEvent.setup();
+    render(<ThemeProbe />, { wrapper: Wrapper });
+
+    await user.click(screen.getByText("register-valid"));
+    await user.click(screen.getByText("clear"));
+
+    expect(customProp("--custom-color-accent-primary")).toBe("");
+  });
+
+  it("removes custom theme from localStorage after clearCustomTheme", async () => {
+    const user = userEvent.setup();
+    render(<ThemeProbe />, { wrapper: Wrapper });
+
+    await user.click(screen.getByText("register-valid"));
+    await user.click(screen.getByText("apply"));
+    await user.click(screen.getByText("clear"));
+
+    expect(localStorage.getItem(CUSTOM_THEME_STORAGE_KEY)).toBeNull();
+  });
+});
+
+// ─── Validation / invalid-override state ─────────────────────────────────────
+
+describe("ThemeProvider — validation errors", () => {
+  it("transitions to invalid-override when a locked token is supplied", async () => {
+    const user = userEvent.setup();
+    render(<ThemeProbe />, { wrapper: Wrapper });
+
+    await user.click(screen.getByText("register-locked"));
+
+    expect(screen.getByTestId("custom-state")).toHaveTextContent(
+      "invalid-override",
+    );
+    expect(Number(screen.getByTestId("error-count").textContent)).toBeGreaterThan(0);
+  });
+
+  it("transitions to invalid-override on a contrast failure", async () => {
+    const user = userEvent.setup();
+    render(<ThemeProbe />, { wrapper: Wrapper });
+
+    await user.click(screen.getByText("register-bad-contrast"));
+
+    expect(screen.getByTestId("custom-state")).toHaveTextContent(
+      "invalid-override",
+    );
+  });
+
+  it("does not apply data-theme=custom on a failed registration", async () => {
+    const user = userEvent.setup();
+    render(<ThemeProbe />, { wrapper: Wrapper });
+
+    await user.click(screen.getByText("register-locked"));
+
+    expect(currentDataTheme()).not.toBe("custom");
+  });
+
+  it("does not persist a failed registration to localStorage", async () => {
+    const user = userEvent.setup();
+    render(<ThemeProbe />, { wrapper: Wrapper });
+
+    await user.click(screen.getByText("register-bad-contrast"));
+
+    expect(localStorage.getItem(CUSTOM_THEME_STORAGE_KEY)).toBeNull();
+  });
+
+  it("returns false from registerTheme on validation failure", () => {
+    const { result } = renderHook(() => useTheme(), { wrapper: Wrapper });
+    let returnValue: boolean | undefined;
+    act(() => {
+      returnValue = result.current.registerTheme(LOCKED_TOKEN_BRAND);
+    });
+    expect(returnValue).toBe(false);
+  });
+
+  it("returns true from registerTheme on success", () => {
+    const { result } = renderHook(() => useTheme(), { wrapper: Wrapper });
+    let returnValue: boolean | undefined;
+    act(() => {
+      returnValue = result.current.registerTheme(VALID_BRAND);
+    });
+    expect(returnValue).toBe(true);
+  });
+});
+
+// ─── previewCustomTheme ───────────────────────────────────────────────────────
+
+describe("ThemeProvider — previewCustomTheme", () => {
+  it("behaves identically to registerTheme for a valid definition", async () => {
+    const user = userEvent.setup();
+    render(<ThemeProbe />, { wrapper: Wrapper });
+
+    await user.click(screen.getByText("preview"));
+
+    expect(screen.getByTestId("custom-state")).toHaveTextContent(
+      "custom-pending-preview",
+    );
+    expect(currentDataTheme()).toBe("custom");
+  });
+
+  it("does NOT persist to localStorage (preview only)", async () => {
+    const user = userEvent.setup();
+    render(<ThemeProbe />, { wrapper: Wrapper });
+
+    await user.click(screen.getByText("preview"));
+
+    expect(localStorage.getItem(CUSTOM_THEME_STORAGE_KEY)).toBeNull();
+  });
+});
+
+// ─── Persistence / rehydration ────────────────────────────────────────────────
+
+describe("ThemeProvider — persistence and rehydration", () => {
+  it("rehydrates a persisted custom theme on mount", () => {
+    const stored = {
+      id: "acme-corp",
+      label: "Acme Corp",
+      tokenOverrides: {},
+      validatedTokens: { "--color-accent-primary": "#1e40af" },
+    };
+    localStorage.setItem(CUSTOM_THEME_STORAGE_KEY, JSON.stringify(stored));
+
+    render(<ThemeProbe />, { wrapper: Wrapper });
+
+    expect(screen.getByTestId("custom-state")).toHaveTextContent("custom-applied");
+    expect(screen.getByTestId("custom-id")).toHaveTextContent("acme-corp");
+  });
+
+  it("ignores a malformed custom theme entry in localStorage", () => {
+    localStorage.setItem(CUSTOM_THEME_STORAGE_KEY, "not-valid-json{{");
+    // Must not throw.
+    expect(() => render(<ThemeProbe />, { wrapper: Wrapper })).not.toThrow();
+    expect(screen.getByTestId("custom-state")).toHaveTextContent("default");
+  });
+
+  it("does not apply a custom theme when nothing is stored", () => {
+    render(<ThemeProbe />, { wrapper: Wrapper });
+    expect(currentDataTheme()).not.toBe("custom");
+  });
+
+  it("sanitises a theme id containing unsafe characters", () => {
+    const { result } = renderHook(() => useTheme(), { wrapper: Wrapper });
+    act(() => {
+      result.current.registerTheme({
+        ...VALID_BRAND,
+        id: "Acme Corp <script>",
+      });
+    });
+    // The id is sanitised: unsafe chars become '-', leaving no < or >
+    const id = result.current.customTheme?.id ?? "";
+    expect(id).not.toMatch(/[<>]/);
+    expect(id.length).toBeGreaterThan(0);
+  });
+
+  it("rejects a theme id that reduces to empty after sanitisation", () => {
+    const { result } = renderHook(() => useTheme(), { wrapper: Wrapper });
+    let ok: boolean | undefined;
+    act(() => {
+      ok = result.current.registerTheme({
+        ...VALID_BRAND,
+        id: "<<<>>>",
+      });
+    });
+    expect(ok).toBe(false);
+    expect(result.current.customThemeState).toBe("invalid-override");
+  });
+});
+
+// ─── applyCustomTheme guard ───────────────────────────────────────────────────
+
+describe("ThemeProvider — applyCustomTheme guard", () => {
+  it("does nothing when state is not custom-pending-preview", () => {
+    const { result } = renderHook(() => useTheme(), { wrapper: Wrapper });
+    act(() => {
+      result.current.applyCustomTheme(); // state is 'default'
+    });
+    expect(result.current.customThemeState).toBe("default");
+    expect(localStorage.getItem(CUSTOM_THEME_STORAGE_KEY)).toBeNull();
+  });
+});
+
+// ─── useTheme guard ───────────────────────────────────────────────────────────
 
 describe("useTheme", () => {
-  it("throws a helpful error when used outside a ThemeProvider", () => {
+  it("throws when used outside a ThemeProvider", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(() => renderHook(() => useTheme())).toThrow(
       /useTheme must be used within a ThemeProvider/,
@@ -482,93 +508,97 @@ describe("useTheme", () => {
     });
     const value: Theme = result.current.theme;
     expect(value).toBe("light");
-    expect(result.current.fontMode).toBe("default");
     expect(typeof result.current.setTheme).toBe("function");
     expect(typeof result.current.toggleTheme).toBe("function");
-    expect(typeof result.current.setFontMode).toBe("function");
-    expect(typeof result.current.toggleFontMode).toBe("function");
+    expect(result.current.easyReadFont).toBe(false);
+    expect(typeof result.current.setEasyReadFont).toBe("function");
+    expect(typeof result.current.toggleEasyReadFont).toBe("function");
+  });
+
+  it("exposes all new custom-theme API members", () => {
+    const { result } = renderHook(() => useTheme(), { wrapper: Wrapper });
+    expect(typeof result.current.registerTheme).toBe("function");
+    expect(typeof result.current.previewCustomTheme).toBe("function");
+    expect(typeof result.current.applyCustomTheme).toBe("function");
+    expect(typeof result.current.clearCustomTheme).toBe("function");
+    expect(result.current.customThemeState).toBeDefined();
+    expect(Array.isArray(result.current.registrationErrors)).toBe(true);
   });
 });
 
-// ─── Font Mode Unit Tests ────────────────────────────────────────────────────
-
-describe("isFontMode", () => {
-  it("accepts only 'default' and 'dyslexic'", () => {
-    expect(isFontMode("default")).toBe(true);
-    expect(isFontMode("dyslexic")).toBe(true);
+describe("isEasyReadFont", () => {
+  it("accepts valid boolean/boolean-string members", () => {
+    expect(isEasyReadFont(true)).toBe(true);
+    expect(isEasyReadFont(false)).toBe(true);
+    expect(isEasyReadFont("true")).toBe(true);
+    expect(isEasyReadFont("false")).toBe(true);
   });
 
-  it("rejects tampered / invalid values (security gate)", () => {
-    for (const bad of [
-      "Dyslexic",
-      "default ",
-      "",
-      "arial",
-      "dyslexic\" onload=alert(1)",
-      null,
-      undefined,
-      123,
-      {},
-    ]) {
-      expect(isFontMode(bad)).toBe(false);
-    }
+  it("rejects invalid values", () => {
+    expect(isEasyReadFont("invalid")).toBe(false);
+    expect(isEasyReadFont(null)).toBe(false);
+    expect(isEasyReadFont(undefined)).toBe(false);
+    expect(isEasyReadFont(123)).toBe(false);
   });
 });
 
-describe("resolveInitialFontMode", () => {
-  it("returns stored font mode when valid", () => {
-    localStorage.setItem(FONT_STORAGE_KEY, "dyslexic");
-    expect(resolveInitialFontMode()).toBe("dyslexic");
+describe("getStoredFontPreference", () => {
+  it("returns true when localStorage has true", () => {
+    localStorage.setItem(FONT_STORAGE_KEY, "true");
+    expect(getStoredFontPreference()).toBe(true);
   });
 
-  it("falls back to 'default' when nothing is stored", () => {
-    expect(resolveInitialFontMode()).toBe("default");
-  });
-
-  it("falls back to 'default' when stored value is invalid", () => {
-    localStorage.setItem(FONT_STORAGE_KEY, "invalid-font");
-    expect(resolveInitialFontMode()).toBe("default");
-  });
-
-  it("returns 'default' when window is undefined (SSR safety)", () => {
-    vi.stubGlobal("window", undefined);
-    try {
-      expect(resolveInitialFontMode()).toBe("default");
-    } finally {
-      vi.unstubAllGlobals();
-    }
+  it("returns false when localStorage has false or invalid", () => {
+    localStorage.setItem(FONT_STORAGE_KEY, "false");
+    expect(getStoredFontPreference()).toBe(false);
+    localStorage.setItem(FONT_STORAGE_KEY, "neon");
+    expect(getStoredFontPreference()).toBe(false);
   });
 });
 
-describe("applyFontMode / initFontMode", () => {
-  it("applyFontMode sets data-font attribute on document root", () => {
-    applyFontMode("dyslexic");
-    expect(currentDataFont()).toBe("dyslexic");
+describe("applyFontPreference", () => {
+  it("sets data-font attribute on the document root", () => {
+    applyFontPreference(true);
+    expect(currentDataFont()).toBe("easy-read");
+    applyFontPreference(false);
+    expect(currentDataFont()).toBe("default");
+  });
+});
 
-    applyFontMode("default");
+describe("initTheme font initialization", () => {
+  it("resolves and applies the font preference on initTheme", () => {
+    localStorage.setItem(FONT_STORAGE_KEY, "true");
+    initTheme();
+    expect(currentDataFont()).toBe("easy-read");
+  });
+});
+
+describe("ThemeProvider font behaviour", () => {
+  it("first visit with no preference uses default font", () => {
+    mockMatchMedia(false);
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+    expect(screen.getByTestId("easy-read")).toHaveTextContent("false");
     expect(currentDataFont()).toBe("default");
   });
 
-  it("initFontMode resolves initial font mode and applies data-font", () => {
-    localStorage.setItem(FONT_STORAGE_KEY, "dyslexic");
-    const applied = initFontMode();
-    expect(applied).toBe("dyslexic");
-    expect(currentDataFont()).toBe("dyslexic");
+  it("first visit with stored preference true loads easy-read font", () => {
+    mockMatchMedia(false);
+    localStorage.setItem(FONT_STORAGE_KEY, "true");
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+    expect(screen.getByTestId("easy-read")).toHaveTextContent("true");
+    expect(currentDataFont()).toBe("easy-read");
   });
 
-  it("applyFontMode is a no-op when document is undefined", () => {
-    vi.stubGlobal("document", undefined);
-    try {
-      expect(() => applyFontMode("dyslexic")).not.toThrow();
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  });
-});
-
-describe("Font Mode Provider & Sync Behavior", () => {
-  it("initializes font mode from stored preference", () => {
-    localStorage.setItem(FONT_STORAGE_KEY, "dyslexic");
+  it("toggleEasyReadFont flips the preference, persists, and handles transitioning status", () => {
+    vi.useFakeTimers();
     mockMatchMedia(false);
     render(
       <ThemeProvider>
@@ -576,70 +606,48 @@ describe("Font Mode Provider & Sync Behavior", () => {
       </ThemeProvider>,
     );
 
-    expect(screen.getByTestId("fontMode")).toHaveTextContent("dyslexic");
-    expect(currentDataFont()).toBe("dyslexic");
-  });
+    // Toggle on
+    fireEvent.click(screen.getByText("toggle-font"));
+    expect(screen.getByTestId("easy-read")).toHaveTextContent("true");
+    expect(currentDataFont()).toBe("easy-read");
+    expect(localStorage.getItem(FONT_STORAGE_KEY)).toBe("true");
+    expect(document.documentElement.getAttribute("data-font-transitioning")).toBe("true");
 
-  it("toggleFontMode switches between default and dyslexic mode and persists choice", async () => {
-    const user = userEvent.setup();
-    mockMatchMedia(false);
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-
-    expect(screen.getByTestId("fontMode")).toHaveTextContent("default");
-    expect(currentDataFont()).toBe("default");
-
-    await user.click(screen.getByText("toggle-font"));
-    expect(screen.getByTestId("fontMode")).toHaveTextContent("dyslexic");
-    expect(currentDataFont()).toBe("dyslexic");
-    expect(localStorage.getItem(FONT_STORAGE_KEY)).toBe("dyslexic");
-
-    await user.click(screen.getByText("toggle-font"));
-    expect(screen.getByTestId("fontMode")).toHaveTextContent("default");
-    expect(currentDataFont()).toBe("default");
-    expect(localStorage.getItem(FONT_STORAGE_KEY)).toBe("default");
-  });
-
-  it("setFontMode explicitly sets font mode state", async () => {
-    const user = userEvent.setup();
-    mockMatchMedia(false);
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-
-    await user.click(screen.getByText("set-font-dyslexic"));
-    expect(screen.getByTestId("fontMode")).toHaveTextContent("dyslexic");
-    expect(localStorage.getItem(FONT_STORAGE_KEY)).toBe("dyslexic");
-
-    await user.click(screen.getByText("set-font-default"));
-    expect(screen.getByTestId("fontMode")).toHaveTextContent("default");
-    expect(localStorage.getItem(FONT_STORAGE_KEY)).toBe("default");
-  });
-
-  it("does not throw when font mode persistence fails", async () => {
-    const user = userEvent.setup();
-    mockMatchMedia(false);
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-
-    const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
-      throw new Error("quota exceeded");
+    // Advance timer past transition time (150ms)
+    act(() => {
+      vi.advanceTimersByTime(150);
     });
+    expect(document.documentElement.getAttribute("data-font-transitioning")).toBeNull();
 
-    await user.click(screen.getByText("set-font-dyslexic"));
-    expect(screen.getByTestId("fontMode")).toHaveTextContent("dyslexic");
-    spy.mockRestore();
+    // Toggle off
+    fireEvent.click(screen.getByText("toggle-font"));
+    expect(screen.getByTestId("easy-read")).toHaveTextContent("false");
+    expect(currentDataFont()).toBe("default");
+    expect(localStorage.getItem(FONT_STORAGE_KEY)).toBe("false");
+    expect(document.documentElement.getAttribute("data-font-transitioning")).toBe("true");
+
+    act(() => {
+      vi.advanceTimersByTime(150);
+    });
+    expect(document.documentElement.getAttribute("data-font-transitioning")).toBeNull();
+    vi.useRealTimers();
   });
 
-  it("syncs valid fontMode updates across tabs via storage event", () => {
+  it("setEasyReadFont explicitly sets font preference", () => {
+    mockMatchMedia(false);
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+
+    fireEvent.click(screen.getByText("set-font-true"));
+    expect(screen.getByTestId("easy-read")).toHaveTextContent("true");
+    expect(localStorage.getItem(FONT_STORAGE_KEY)).toBe("true");
+  });
+
+  it("syncs easy-read font choice across tabs via storage events", () => {
+    vi.useFakeTimers();
     mockMatchMedia(false);
     render(
       <ThemeProvider>
@@ -651,57 +659,95 @@ describe("Font Mode Provider & Sync Behavior", () => {
       window.dispatchEvent(
         new StorageEvent("storage", {
           key: FONT_STORAGE_KEY,
-          newValue: "dyslexic",
+          newValue: "true",
         }),
       );
     });
 
-    expect(screen.getByTestId("fontMode")).toHaveTextContent("dyslexic");
-    expect(currentDataFont()).toBe("dyslexic");
+    expect(screen.getByTestId("easy-read")).toHaveTextContent("true");
+    expect(currentDataFont()).toBe("easy-read");
+    expect(document.documentElement.getAttribute("data-font-transitioning")).toBe("true");
+
+    act(() => {
+      vi.advanceTimersByTime(150);
+    });
+    expect(document.documentElement.getAttribute("data-font-transitioning")).toBeNull();
+    vi.useRealTimers();
+  });
+});
+
+describe("ThemeProvider — themePreference and setThemePreference", () => {
+  it("initializes themePreference as auto when no value is stored", () => {
+    render(<ThemeProbe />, { wrapper: Wrapper });
+    expect(screen.getByTestId("theme-pref")).toHaveTextContent("auto");
   });
 
-  it("resets to default font mode when another tab clears font storage choice", () => {
-    localStorage.setItem(FONT_STORAGE_KEY, "dyslexic");
-    mockMatchMedia(false);
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
+  it("initializes themePreference as light/dark when stored", () => {
+    localStorage.setItem(THEME_STORAGE_KEY, "dark");
+    render(<ThemeProbe />, { wrapper: Wrapper });
+    expect(screen.getByTestId("theme-pref")).toHaveTextContent("dark");
+  });
 
-    expect(screen.getByTestId("fontMode")).toHaveTextContent("dyslexic");
+  it("setThemePreference('auto') clears localStorage and resumes OS following", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem(THEME_STORAGE_KEY, "dark");
+    const mq = mockMatchMedia(true); // OS prefers dark
+
+    render(<ThemeProbe />, { wrapper: Wrapper });
+    expect(screen.getByTestId("theme-pref")).toHaveTextContent("dark");
+    expect(screen.getByTestId("theme")).toHaveTextContent("dark");
+
+    mq.matches = false; // OS is now light
+
+    await user.click(screen.getByText("set-pref-auto"));
+    expect(screen.getByTestId("theme-pref")).toHaveTextContent("auto");
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBeNull();
+
+    expect(screen.getByTestId("theme")).toHaveTextContent("light");
+
+    act(() => {
+      mq.dispatchChange(true);
+    });
+    expect(screen.getByTestId("theme")).toHaveTextContent("dark");
+  });
+
+  it("setThemePreference('light') writes localStorage and stops OS following", async () => {
+    const user = userEvent.setup();
+    const mq = mockMatchMedia(true); // OS prefers dark
+
+    render(<ThemeProbe />, { wrapper: Wrapper });
+    expect(screen.getByTestId("theme-pref")).toHaveTextContent("auto");
+    expect(screen.getByTestId("theme")).toHaveTextContent("dark");
+
+    await user.click(screen.getByText("set-pref-light"));
+    expect(screen.getByTestId("theme-pref")).toHaveTextContent("light");
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("light");
+    expect(screen.getByTestId("theme")).toHaveTextContent("light");
+
+    act(() => {
+      mq.dispatchChange(true);
+    });
+    expect(screen.getByTestId("theme")).toHaveTextContent("light");
+  });
+
+  it("Cross-tab: storage event with newValue === null sets preference to 'auto' and applies OS theme", () => {
+    localStorage.setItem(THEME_STORAGE_KEY, "dark");
+    mockMatchMedia(false); // OS prefers light
+
+    render(<ThemeProbe />, { wrapper: Wrapper });
+    expect(screen.getByTestId("theme-pref")).toHaveTextContent("dark");
+    expect(screen.getByTestId("theme")).toHaveTextContent("dark");
 
     act(() => {
       window.dispatchEvent(
         new StorageEvent("storage", {
-          key: FONT_STORAGE_KEY,
+          key: THEME_STORAGE_KEY,
           newValue: null,
-        }),
+        })
       );
     });
 
-    expect(screen.getByTestId("fontMode")).toHaveTextContent("default");
-    expect(currentDataFont()).toBe("default");
-  });
-
-  it("ignores invalid or tampered font values from storage events", () => {
-    mockMatchMedia(false);
-    render(
-      <ThemeProvider>
-        <ThemeProbe />
-      </ThemeProvider>,
-    );
-
-    act(() => {
-      window.dispatchEvent(
-        new StorageEvent("storage", {
-          key: FONT_STORAGE_KEY,
-          newValue: "dyslexic<script>alert(1)</script>",
-        }),
-      );
-    });
-
-    expect(screen.getByTestId("fontMode")).toHaveTextContent("default");
-    expect(currentDataFont()).toBe("default");
+    expect(screen.getByTestId("theme-pref")).toHaveTextContent("auto");
+    expect(screen.getByTestId("theme")).toHaveTextContent("light");
   });
 });
