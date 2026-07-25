@@ -8,11 +8,45 @@ import {
   drawBadgeOverlay,
 } from "../faviconBadge";
 
+const createMockContext = () =>
+  ({
+    save: vi.fn(),
+    restore: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    arcTo: vi.fn(),
+    arc: vi.fn(),
+    rect: vi.fn(),
+    roundRect: vi.fn(),
+    closePath: vi.fn(),
+    stroke: vi.fn(),
+    fill: vi.fn(),
+    fillText: vi.fn(),
+    clearRect: vi.fn(),
+    strokeStyle: "",
+    fillStyle: "",
+    lineWidth: 0,
+    lineCap: "",
+    lineJoin: "",
+    font: "",
+    textAlign: "",
+    textBaseline: "",
+  } as unknown as CanvasRenderingContext2D);
+
 describe("faviconBadge utility", () => {
   let originalHeadHTML: string;
+  let getContextSpy: any;
+  let toDataURLSpy: any;
 
   beforeEach(() => {
     originalHeadHTML = document.head.innerHTML;
+    getContextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, "getContext")
+      .mockImplementation(() => createMockContext());
+    toDataURLSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, "toDataURL")
+      .mockReturnValue("data:image/png;base64,mockedFaviconDataUrl");
   });
 
   afterEach(() => {
@@ -41,26 +75,14 @@ describe("faviconBadge utility", () => {
 
   describe("canvas drawing functions", () => {
     it("executes drawBaseIcon without throwing", () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = 32;
-      canvas.height = 32;
-      const ctx = canvas.getContext("2d");
-      expect(ctx).not.toBeNull();
-      if (ctx) {
-        expect(() => drawBaseIcon(ctx, 32)).not.toThrow();
-      }
+      const mockCtx = createMockContext();
+      expect(() => drawBaseIcon(mockCtx, 32)).not.toThrow();
     });
 
     it("executes drawBadgeOverlay for single digit and overflow without throwing", () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = 32;
-      canvas.height = 32;
-      const ctx = canvas.getContext("2d");
-      expect(ctx).not.toBeNull();
-      if (ctx) {
-        expect(() => drawBadgeOverlay(ctx, "3", 32)).not.toThrow();
-        expect(() => drawBadgeOverlay(ctx, "9+", 32)).not.toThrow();
-      }
+      const mockCtx = createMockContext();
+      expect(() => drawBadgeOverlay(mockCtx, "3", 32)).not.toThrow();
+      expect(() => drawBadgeOverlay(mockCtx, "9+", 32)).not.toThrow();
     });
   });
 
@@ -98,7 +120,7 @@ describe("faviconBadge utility", () => {
       // Update to unread 5
       updateFaviconBadge(5);
       const updatedLink = document.querySelector("link#favicon") as HTMLLinkElement;
-      expect(updatedLink.href).toMatch(/^data:image\/png;base64,/);
+      expect(updatedLink.getAttribute("href")).toMatch(/^data:image\/png;base64,/);
 
       // Update to 0
       updateFaviconBadge(0);
@@ -118,3 +140,4 @@ describe("faviconBadge utility", () => {
     });
   });
 });
+
