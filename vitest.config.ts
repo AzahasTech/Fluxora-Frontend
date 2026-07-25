@@ -54,6 +54,8 @@ export default defineConfig({
         "src/components/colorBlindSimulation/ColorBlindToggle.tsx",
         // Contrast utilities
         "src/utils/contrastUtils.ts",
+        // Activity Heatmap
+        "src/components/treasuryOverviewPage/ActivityHeatmap.tsx",
         // Presence feature
         "src/components/presence/PresenceBadge.tsx",
         "src/components/presence/PresenceViewerList.tsx",
