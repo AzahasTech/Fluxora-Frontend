@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X, Moon, Sun, Type, Search, Command } from "lucide-react";
+import { Menu, X, Type, Search, Command } from "lucide-react";
 import { useWallet } from "../wallet-connect/Walletcontext";
 import { useTheme } from "../../theme/ThemeProvider";
 import NavLink from "./NavLink";
@@ -289,7 +289,7 @@ export default function AppNavbar({
   onSidebarToggle,
   isSidebarOpen = false,
 }: AppNavbarProps) {
-  const { theme, toggleTheme, fontMode, toggleFontMode } = useTheme();
+  const { easyReadFont, toggleEasyReadFont } = useTheme();
   const {
     connected,
     address,
@@ -313,14 +313,6 @@ const location = useLocation();
   const breadcrumbs = useBreadcrumbs(location.pathname);
   const showBreadcrumb = isAppView && breadcrumbs.length > 1;
   const links = connected ? APP_PRIMARY_LINKS : ANON_LINKS;
-
-  const handleMobileToggle = () => {
-    if (isAppView && onSidebarToggle) {
-      onSidebarToggle();
-    } else {
-      setMobileMenuOpen((o) => !o);
-    }
-  };
 
   const closeMobile = () => setMobileMenuOpen(false);
 
@@ -451,12 +443,12 @@ const location = useLocation();
 
           {/* Easy-read font toggle */}
           <button
-            onClick={toggleFontMode}
-            aria-label={`Switch to ${fontMode === "default" ? "easy-read dyslexia-friendly" : "default"} font`}
-            aria-pressed={fontMode === "dyslexic"}
-            title={fontMode === "default" ? "Enable easy-read font" : "Disable easy-read font"}
+            onClick={toggleEasyReadFont}
+            aria-label={`Switch to ${!easyReadFont ? "easy-read dyslexia-friendly" : "default"} font`}
+            aria-pressed={easyReadFont}
+            title={easyReadFont ? "Disable easy-read font" : "Enable easy-read font"}
             className={`flex items-center justify-center min-h-[44px] min-w-[44px] px-2 rounded-full border transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${
-              fontMode === "dyslexic"
+              easyReadFont
                 ? "border-[var(--accent)] text-[var(--accent)] bg-[var(--surface-elevated)]"
                 : "border-[var(--navbar-icon-border)] text-[var(--navbar-icon-color)] hover:border-[var(--accent)]/50 hover:text-[var(--accent)]"
             }`}
@@ -538,12 +530,12 @@ const location = useLocation();
             </button>
 
             <button
-              onClick={toggleFontMode}
-              aria-label={`Switch to ${fontMode === "default" ? "easy-read dyslexia-friendly" : "default"} font`}
-              aria-pressed={fontMode === "dyslexic"}
-              title={fontMode === "default" ? "Enable easy-read font" : "Disable easy-read font"}
+              onClick={toggleEasyReadFont}
+              aria-label={`Switch to ${!easyReadFont ? "easy-read dyslexia-friendly" : "default"} font`}
+              aria-pressed={easyReadFont}
+              title={easyReadFont ? "Disable easy-read font" : "Enable easy-read font"}
               className={`flex items-center justify-center min-h-[44px] min-w-[44px] px-2 rounded-full border transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${
-                fontMode === "dyslexic"
+                easyReadFont
                   ? "border-[var(--accent)] text-[var(--accent)] bg-[var(--surface-elevated)]"
                   : "border-[var(--navbar-icon-border)] text-[var(--navbar-icon-color)] hover:border-[var(--accent)]/50 hover:text-[var(--accent)]"
               }`}

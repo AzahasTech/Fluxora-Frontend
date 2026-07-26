@@ -140,7 +140,7 @@ describe("ConnectWalletModal", () => {
     expect(screen.getByText(/Open your/)).toBeInTheDocument();
     expect(screen.getByText(/Click the/)).toBeInTheDocument();
     expect(
-      screen.getByText((content, node) => {
+      screen.getByText((_content, node) => {
         const isMatch = node?.textContent?.includes("Select Testnet and return here.") ?? false;
         return isMatch && node?.tagName?.toLowerCase() === "span";
       })

@@ -73,7 +73,7 @@ describe("StreamRow", () => {
   });
 
   it("opens the actions menu when the ellipsis button is clicked and closes on Escape", async () => {
-    const { onSelect } = renderRow();
+    renderRow();
 
     // The ellipsis trigger should exist
     const trigger = screen.getByRole("button", { name: `Actions for stream ${stream.name}` });
