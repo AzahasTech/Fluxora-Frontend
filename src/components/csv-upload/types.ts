@@ -48,7 +48,7 @@ export interface ParseResult {
   autoMapping: Partial<ColumnMapping>;
   /** Parsed rows — only present when `headersMatch` is true (or after manual mapping). */
   rows: CsvRow[];
-  /** Top-level parse error (wrong file type, empty, > 500 rows). */
+  /** Top-level parse error (wrong file type, empty, oversized, > 500 rows). */
   parseError?: string;
 }
 

@@ -16,6 +16,12 @@ import { CANONICAL_HEADERS } from './types';
 
 export const MAX_CSV_ROWS = 500;
 
+/**
+ * Max upload size checked in CsvDropZone before `file.text()`.
+ * Sized generously for {@link MAX_CSV_ROWS} short rows (~20× a typical 500-row export).
+ */
+export const MAX_CSV_FILE_SIZE_BYTES = 1_048_576; // 1 MiB
+
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
 /**
