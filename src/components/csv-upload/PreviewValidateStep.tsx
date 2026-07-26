@@ -3,6 +3,7 @@ import './PreviewValidateStep.css';
 import type { CanonicalHeader, CsvRow } from './types';
 import { validateRow, markDuplicates } from './csvParser';
 import { ValidationMessage } from '../ValidationMessage';
+import { ConfirmModal } from '../common/ConfirmModal';
 
 export interface PreviewValidateStepProps {
   rows: CsvRow[];
@@ -291,6 +292,7 @@ const PreviewValidateStep: React.FC<PreviewValidateStepProps> = ({
 }) => {
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [liveMessage, setLiveMessage] = useState('');
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const fixButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   const validCount = rows.filter((r) => r.status === 'valid' || r.status === 'duplicate-recipient').length;
@@ -377,12 +379,18 @@ const PreviewValidateStep: React.FC<PreviewValidateStepProps> = ({
     setLiveMessage(`${errorCount} invalid rows skipped.`);
   }, [rows, onRowsChange, errorCount]);
 
-  const handleReplaceConfirm = useCallback(() => {
-    const confirmed = window.confirm(
-      'Replacing the file will clear your current preview. Continue?',
-    );
-    if (confirmed) onReplaceFile();
+  const handleReplaceClick = useCallback(() => {
+    setIsConfirmModalOpen(true);
+  }, []);
+
+  const handleConfirmReplace = useCallback(() => {
+    setIsConfirmModalOpen(false);
+    onReplaceFile();
   }, [onReplaceFile]);
+
+  const handleCancelReplace = useCallback(() => {
+    setIsConfirmModalOpen(false);
+  }, []);
 
   return (
     <div className="csv-preview-step">
@@ -410,7 +418,7 @@ const PreviewValidateStep: React.FC<PreviewValidateStepProps> = ({
         <button
           type="button"
           className="csv-replace-link"
-          onClick={handleReplaceConfirm}
+          onClick={handleReplaceClick}
           aria-label="Replace CSV file"
         >
           Replace CSV
@@ -605,6 +613,16 @@ const PreviewValidateStep: React.FC<PreviewValidateStepProps> = ({
           </svg>
         </button>
       </div>
+      {/* ── Confirm Modal ── */}
+      <ConfirmModal
+        isOpen={isConfirmModalOpen}
+        title="Replace CSV File?"
+        description="Replacing the file will clear your current preview. Continue?"
+        confirmText="Replace"
+        cancelText="Cancel"
+        onConfirm={handleConfirmReplace}
+        onCancel={handleCancelReplace}
+      />
     </div>
   );
 };
