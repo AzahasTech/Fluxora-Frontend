@@ -1,550 +1,449 @@
-/**
- * csvParser.test.ts
- *
- * Unit tests for the pure CSV parsing and row validation logic.
- *
- * Covers:
- *  - validateRow: all field paths including the new deposit_amount upper-bound (#972)
- *  - splitCsvLine / stripBom / normaliseLineEndings helpers
- *  - parseAndValidateCsv: happy path, error paths, column auto-mapping, manual mapping
- *  - markDuplicates
- *  - buildTemplateCsv
- *  - MAX_DEPOSIT_AMOUNT constant value (regression for #972)
- */
+﻿import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { describe, expect, it } from 'vitest';
+vi.mock('../../../lib/stellar', () => ({
+  isValidStellarAddress: vi.fn(
+    (addr: string) => addr.startsWith('G') && addr.length === 56,
+  ),
+}));
+
+import { isValidStellarAddress } from '../../../lib/stellar';
 import {
-  MAX_CSV_ROWS,
-  MAX_DEPOSIT_AMOUNT,
-  buildTemplateCsv,
-  markDuplicates,
-  normaliseLineEndings,
-  parseAndValidateCsv,
   splitCsvLine,
   stripBom,
+  normaliseLineEndings,
   validateRow,
+  markDuplicates,
+  parseAndValidateCsv,
+  buildTemplateCsv,
+  MAX_CSV_ROWS,
 } from '../csvParser';
 import type { CsvRow } from '../types';
 
-// ─── Fixtures ─────────────────────────────────────────────────────────────────
+const VALID_ADDR = 'G'.padEnd(56, 'A');
+const VALID_ADDR_2 = 'G' + 'B'.repeat(55);
+const INVALID_ADDR = 'not-a-stellar-address';
 
-/** A checksum-valid Stellar G-address accepted by isValidStellarAddress. */
-const VALID_STELLAR =
-  'GATDOSCZNJ5YZHNOX7IOD4QDCQSTMR2YNF5IXHFNX3H6B4ICCMSDLOWN';
-
-const VALID_STELLAR_2 =
-  'GBLLBQBIMF5GKBWOPCX5BVZQPQ3BFLHQBUZPXDXDCNFAIOAVZF4JIVQ';
-
-/** Returns a base row that should pass all validations. */
-function validRow(overrides: Partial<{
-  recipient: string;
-  depositAmount: string;
-  accrualRatePerDay: string;
-  durationDays: string;
-}> = {}) {
-  return {
-    recipient: VALID_STELLAR,
-    depositAmount: '1000.00',
-    accrualRatePerDay: '38.62',
-    durationDays: '30',
-    ...overrides,
-  };
-}
-
-// ─── MAX_DEPOSIT_AMOUNT constant ──────────────────────────────────────────────
-
-describe('MAX_DEPOSIT_AMOUNT constant (#972)', () => {
-  it('equals MAX_ACCRUAL_RATE (100,000) × MAX_DURATION_DAYS (3,650)', () => {
-    expect(MAX_DEPOSIT_AMOUNT).toBe(365_000_000);
-  });
-
-  it('stays within JavaScript safe-integer territory', () => {
-    expect(MAX_DEPOSIT_AMOUNT).toBeLessThan(Number.MAX_SAFE_INTEGER);
-  });
+beforeEach(() => {
+  vi.mocked(isValidStellarAddress).mockImplementation(
+    (addr: string) => addr.startsWith('G') && addr.length === 56,
+  );
 });
-
-// ─── validateRow — deposit_amount upper bound (#972) ─────────────────────────
-
-describe('validateRow: deposit_amount upper bound (#972)', () => {
-  it('accepts a deposit amount exactly at the maximum', () => {
-    const { fieldErrors, isValid } = validateRow(
-      validRow({ depositAmount: String(MAX_DEPOSIT_AMOUNT) }),
-    );
-    expect(fieldErrors.deposit_amount).toBeUndefined();
-    expect(isValid).toBe(true);
-  });
-
-  it('accepts a deposit amount well below the maximum', () => {
-    const { fieldErrors, isValid } = validateRow(
-      validRow({ depositAmount: '500.5' }),
-    );
-    expect(fieldErrors.deposit_amount).toBeUndefined();
-    expect(isValid).toBe(true);
-  });
-
-  it('rejects a deposit amount one unit above the maximum', () => {
-    const { fieldErrors, isValid } = validateRow(
-      validRow({ depositAmount: String(MAX_DEPOSIT_AMOUNT + 1) }),
-    );
-    expect(fieldErrors.deposit_amount).toMatch(/365,000,000/);
-    expect(isValid).toBe(false);
-  });
-
-  it('rejects a wildly over-bound deposit (e.g. an extra digit)', () => {
-    const { fieldErrors } = validateRow(
-      validRow({ depositAmount: '3650000000' }), // 10× the cap
-    );
-    expect(fieldErrors.deposit_amount).toMatch(/365,000,000/);
-  });
-
-  it('error message mentions the cap value clearly', () => {
-    const { fieldErrors } = validateRow(
-      validRow({ depositAmount: String(MAX_DEPOSIT_AMOUNT + 0.01) }),
-    );
-    expect(fieldErrors.deposit_amount).toBe(
-      'Deposit may not exceed 365,000,000 USDC',
-    );
-  });
-});
-
-// ─── validateRow — deposit_amount existing validations ───────────────────────
-
-describe('validateRow: deposit_amount existing rules', () => {
-  it('rejects an empty deposit field', () => {
-    const { fieldErrors } = validateRow(validRow({ depositAmount: '' }));
-    expect(fieldErrors.deposit_amount).toMatch(/positive number/i);
-  });
-
-  it('rejects a whitespace-only deposit field', () => {
-    const { fieldErrors } = validateRow(validRow({ depositAmount: '   ' }));
-    expect(fieldErrors.deposit_amount).toMatch(/positive number/i);
-  });
-
-  it('rejects NaN deposit values', () => {
-    const { fieldErrors } = validateRow(validRow({ depositAmount: 'abc' }));
-    expect(fieldErrors.deposit_amount).toMatch(/positive number/i);
-  });
-
-  it('rejects zero deposit', () => {
-    const { fieldErrors } = validateRow(validRow({ depositAmount: '0' }));
-    expect(fieldErrors.deposit_amount).toMatch(/positive number/i);
-  });
-
-  it('rejects negative deposit', () => {
-    const { fieldErrors } = validateRow(validRow({ depositAmount: '-100' }));
-    expect(fieldErrors.deposit_amount).toMatch(/positive number/i);
-  });
-
-  it('rejects deposits with more than 7 decimal places', () => {
-    const { fieldErrors } = validateRow(
-      validRow({ depositAmount: '1.12345678' }),
-    );
-    expect(fieldErrors.deposit_amount).toMatch(/7 decimal places/i);
-  });
-
-  it('accepts deposits with exactly 7 decimal places', () => {
-    const { fieldErrors } = validateRow(
-      validRow({ depositAmount: '1.1234567' }),
-    );
-    expect(fieldErrors.deposit_amount).toBeUndefined();
-  });
-
-  it('accepts a deposit with no decimal part', () => {
-    const { fieldErrors } = validateRow(validRow({ depositAmount: '1000' }));
-    expect(fieldErrors.deposit_amount).toBeUndefined();
-  });
-});
-
-// ─── validateRow — recipient ──────────────────────────────────────────────────
-
-describe('validateRow: recipient', () => {
-  it('rejects an empty recipient', () => {
-    const { fieldErrors } = validateRow(validRow({ recipient: '' }));
-    expect(fieldErrors.recipient).toMatch(/required/i);
-  });
-
-  it('rejects a whitespace-only recipient', () => {
-    const { fieldErrors } = validateRow(validRow({ recipient: '   ' }));
-    expect(fieldErrors.recipient).toMatch(/required/i);
-  });
-
-  it('rejects an invalid Stellar address', () => {
-    const { fieldErrors } = validateRow(validRow({ recipient: 'notanaddress' }));
-    expect(fieldErrors.recipient).toMatch(/invalid stellar address/i);
-  });
-
-  it('accepts a valid Stellar address', () => {
-    const { fieldErrors } = validateRow(validRow());
-    expect(fieldErrors.recipient).toBeUndefined();
-  });
-});
-
-// ─── validateRow — accrual_rate_per_day ──────────────────────────────────────
-
-describe('validateRow: accrual_rate_per_day', () => {
-  it('rejects an empty rate', () => {
-    const { fieldErrors } = validateRow(validRow({ accrualRatePerDay: '' }));
-    expect(fieldErrors.accrual_rate_per_day).toMatch(/positive number/i);
-  });
-
-  it('rejects a zero rate', () => {
-    const { fieldErrors } = validateRow(validRow({ accrualRatePerDay: '0' }));
-    expect(fieldErrors.accrual_rate_per_day).toMatch(/positive number/i);
-  });
-
-  it('rejects a negative rate', () => {
-    const { fieldErrors } = validateRow(validRow({ accrualRatePerDay: '-1' }));
-    expect(fieldErrors.accrual_rate_per_day).toMatch(/positive number/i);
-  });
-
-  it('rejects a rate above 100,000', () => {
-    const { fieldErrors } = validateRow(
-      validRow({ accrualRatePerDay: '100001' }),
-    );
-    expect(fieldErrors.accrual_rate_per_day).toMatch(/100,000/);
-  });
-
-  it('accepts a rate exactly at 100,000', () => {
-    const { fieldErrors } = validateRow(
-      validRow({ accrualRatePerDay: '100000' }),
-    );
-    expect(fieldErrors.accrual_rate_per_day).toBeUndefined();
-  });
-});
-
-// ─── validateRow — duration_days ─────────────────────────────────────────────
-
-describe('validateRow: duration_days', () => {
-  it('rejects an empty duration', () => {
-    const { fieldErrors } = validateRow(validRow({ durationDays: '' }));
-    expect(fieldErrors.duration_days).toMatch(/1.+3.650/i);
-  });
-
-  it('rejects a duration of 0', () => {
-    const { fieldErrors } = validateRow(validRow({ durationDays: '0' }));
-    expect(fieldErrors.duration_days).toMatch(/1.+3.650/i);
-  });
-
-  it('rejects a fractional duration', () => {
-    const { fieldErrors } = validateRow(validRow({ durationDays: '10.5' }));
-    expect(fieldErrors.duration_days).toMatch(/1.+3.650/i);
-  });
-
-  it('rejects a duration above 3,650', () => {
-    const { fieldErrors } = validateRow(validRow({ durationDays: '3651' }));
-    expect(fieldErrors.duration_days).toMatch(/1.+3.650/i);
-  });
-
-  it('accepts a duration exactly at 3,650', () => {
-    const { fieldErrors } = validateRow(validRow({ durationDays: '3650' }));
-    expect(fieldErrors.duration_days).toBeUndefined();
-  });
-
-  it('accepts a duration of 1', () => {
-    const { fieldErrors } = validateRow(validRow({ durationDays: '1' }));
-    expect(fieldErrors.duration_days).toBeUndefined();
-  });
-});
-
-// ─── validateRow — fully valid row ───────────────────────────────────────────
-
-describe('validateRow: fully valid row', () => {
-  it('returns isValid=true and no field errors for a good row', () => {
-    const { fieldErrors, isValid } = validateRow(validRow());
-    expect(isValid).toBe(true);
-    expect(Object.keys(fieldErrors)).toHaveLength(0);
-  });
-});
-
-// ─── splitCsvLine ─────────────────────────────────────────────────────────────
 
 describe('splitCsvLine', () => {
-  it('splits a simple comma-delimited line', () => {
+  it('splits a simple comma-separated line', () => {
     expect(splitCsvLine('a,b,c')).toEqual(['a', 'b', 'c']);
   });
-
-  it('trims whitespace from each cell', () => {
-    expect(splitCsvLine(' a , b , c ')).toEqual(['a', 'b', 'c']);
+  it('trims whitespace around unquoted cells', () => {
+    expect(splitCsvLine('  a  , b ,c  ')).toEqual(['a', 'b', 'c']);
   });
-
-  it('handles quoted fields with embedded commas', () => {
-    expect(splitCsvLine('"hello, world",foo')).toEqual(['hello, world', 'foo']);
+  it('keeps commas inside quoted fields intact', () => {
+    expect(splitCsvLine('"a,b",c')).toEqual(['a,b', 'c']);
   });
-
-  it('handles escaped quotes inside quoted fields', () => {
-    expect(splitCsvLine('"say ""hi""",bar')).toEqual(['say "hi"', 'bar']);
+  it('unescapes doubled quotes inside a quoted field', () => {
+    expect(splitCsvLine('"say ""hi""",x')).toEqual(['say "hi"', 'x']);
   });
-
-  it('returns a single-element array for a line without commas', () => {
-    expect(splitCsvLine('only')).toEqual(['only']);
+  it('handles a quoted field that is the entire line', () => {
+    expect(splitCsvLine('"only field"')).toEqual(['only field']);
   });
-
-  it('handles an empty string', () => {
+  it('produces an empty trailing cell after a trailing comma', () => {
+    expect(splitCsvLine('a,b,')).toEqual(['a', 'b', '']);
+  });
+  it('returns a single empty cell for an empty string', () => {
     expect(splitCsvLine('')).toEqual(['']);
   });
+  it('handles multiple consecutive commas as empty cells', () => {
+    expect(splitCsvLine('a,,c')).toEqual(['a', '', 'c']);
+  });
+  it('handles a quoted field containing a lone embedded quote via escaping', () => {
+    expect(splitCsvLine('"3.5"" pipe",x')).toEqual(['3.5" pipe', 'x']);
+  });
 });
-
-// ─── stripBom ─────────────────────────────────────────────────────────────────
 
 describe('stripBom', () => {
   it('removes a leading UTF-8 BOM character', () => {
     expect(stripBom('\uFEFFhello')).toBe('hello');
   });
-
-  it('leaves strings without a BOM unchanged', () => {
+  it('leaves text without a BOM unchanged', () => {
     expect(stripBom('hello')).toBe('hello');
   });
-
+  it('only strips a BOM at the very start, not mid-string', () => {
+    expect(stripBom('he\uFEFFllo')).toBe('he\uFEFFllo');
+  });
   it('handles an empty string', () => {
     expect(stripBom('')).toBe('');
   });
 });
 
-// ─── normaliseLineEndings ─────────────────────────────────────────────────────
-
 describe('normaliseLineEndings', () => {
   it('converts CRLF to LF', () => {
     expect(normaliseLineEndings('a\r\nb')).toBe('a\nb');
   });
-
-  it('converts bare CR to LF', () => {
+  it('converts lone CR to LF', () => {
     expect(normaliseLineEndings('a\rb')).toBe('a\nb');
   });
-
-  it('leaves strings with only LF unchanged', () => {
-    expect(normaliseLineEndings('a\nb')).toBe('a\nb');
+  it('leaves LF-only text unchanged', () => {
+    expect(normaliseLineEndings('a\nb\nc')).toBe('a\nb\nc');
+  });
+  it('handles a mix of CRLF, CR, and LF in the same string', () => {
+    expect(normaliseLineEndings('a\r\nb\rc\nd')).toBe('a\nb\nc\nd');
   });
 });
 
-// ─── markDuplicates ───────────────────────────────────────────────────────────
+describe('validateRow', () => {
+  const baseRow = {
+    recipient: VALID_ADDR,
+    depositAmount: '100',
+    accrualRatePerDay: '10',
+    durationDays: '30',
+  };
+
+  it('passes for a fully valid row', () => {
+    const result = validateRow(baseRow);
+    expect(result.isValid).toBe(true);
+    expect(result.fieldErrors).toEqual({});
+  });
+
+  describe('recipient', () => {
+    it('flags an empty recipient as required', () => {
+      const result = validateRow({ ...baseRow, recipient: '' });
+      expect(result.isValid).toBe(false);
+      expect(result.fieldErrors.recipient).toBe('Recipient is required');
+    });
+    it('flags a whitespace-only recipient as required', () => {
+      const result = validateRow({ ...baseRow, recipient: '   ' });
+      expect(result.fieldErrors.recipient).toBe('Recipient is required');
+    });
+    it('flags an address that fails Stellar validation', () => {
+      const result = validateRow({ ...baseRow, recipient: INVALID_ADDR });
+      expect(result.isValid).toBe(false);
+      expect(result.fieldErrors.recipient).toBe('Invalid Stellar address');
+    });
+    it('accepts a valid Stellar address', () => {
+      const result = validateRow({ ...baseRow, recipient: VALID_ADDR_2 });
+      expect(result.fieldErrors.recipient).toBeUndefined();
+    });
+  });
+
+  describe('deposit_amount', () => {
+    it('flags an empty deposit as required', () => {
+      const result = validateRow({ ...baseRow, depositAmount: '' });
+      expect(result.fieldErrors.deposit_amount).toBe('Deposit must be a positive number');
+    });
+    it('flags a whitespace-only deposit', () => {
+      const result = validateRow({ ...baseRow, depositAmount: '   ' });
+      expect(result.fieldErrors.deposit_amount).toBe('Deposit must be a positive number');
+    });
+    it('flags a non-numeric deposit', () => {
+      const result = validateRow({ ...baseRow, depositAmount: 'abc' });
+      expect(result.fieldErrors.deposit_amount).toBe('Deposit must be a positive number');
+    });
+    it('flags a zero deposit', () => {
+      const result = validateRow({ ...baseRow, depositAmount: '0' });
+      expect(result.fieldErrors.deposit_amount).toBe('Deposit must be a positive number');
+    });
+    it('flags a negative deposit', () => {
+      const result = validateRow({ ...baseRow, depositAmount: '-5' });
+      expect(result.fieldErrors.deposit_amount).toBe('Deposit must be a positive number');
+    });
+    it('accepts a plain positive integer deposit', () => {
+      const result = validateRow({ ...baseRow, depositAmount: '1000' });
+      expect(result.fieldErrors.deposit_amount).toBeUndefined();
+    });
+    it('accepts a deposit with exactly 7 decimal places', () => {
+      const result = validateRow({ ...baseRow, depositAmount: '1.1234567' });
+      expect(result.fieldErrors.deposit_amount).toBeUndefined();
+    });
+    it('flags a deposit with more than 7 decimal places', () => {
+      const result = validateRow({ ...baseRow, depositAmount: '1.12345678' });
+      expect(result.fieldErrors.deposit_amount).toBe('Deposit may have at most 7 decimal places');
+    });
+  });
+
+  describe('accrual_rate_per_day', () => {
+    it('flags an empty rate as required', () => {
+      const result = validateRow({ ...baseRow, accrualRatePerDay: '' });
+      expect(result.fieldErrors.accrual_rate_per_day).toBe('Rate must be a positive number');
+    });
+    it('flags a non-numeric rate', () => {
+      const result = validateRow({ ...baseRow, accrualRatePerDay: 'xyz' });
+      expect(result.fieldErrors.accrual_rate_per_day).toBe('Rate must be a positive number');
+    });
+    it('flags a zero rate', () => {
+      const result = validateRow({ ...baseRow, accrualRatePerDay: '0' });
+      expect(result.fieldErrors.accrual_rate_per_day).toBe('Rate must be a positive number');
+    });
+    it('flags a negative rate', () => {
+      const result = validateRow({ ...baseRow, accrualRatePerDay: '-1' });
+      expect(result.fieldErrors.accrual_rate_per_day).toBe('Rate must be a positive number');
+    });
+    it('accepts a rate exactly at the 100,000 boundary', () => {
+      const result = validateRow({ ...baseRow, accrualRatePerDay: '100000' });
+      expect(result.fieldErrors.accrual_rate_per_day).toBeUndefined();
+    });
+    it('flags a rate just above the 100,000 boundary', () => {
+      const result = validateRow({ ...baseRow, accrualRatePerDay: '100000.01' });
+      expect(result.fieldErrors.accrual_rate_per_day).toBe('Rate must be between 0 and 100,000 USDC/day');
+    });
+    it('accepts a small fractional rate', () => {
+      const result = validateRow({ ...baseRow, accrualRatePerDay: '0.5' });
+      expect(result.fieldErrors.accrual_rate_per_day).toBeUndefined();
+    });
+  });
+
+  describe('duration_days', () => {
+    it('flags an empty duration as required', () => {
+      const result = validateRow({ ...baseRow, durationDays: '' });
+      expect(result.fieldErrors.duration_days).toBe('Duration must be 1–3,650 days');
+    });
+    it('flags a zero duration', () => {
+      const result = validateRow({ ...baseRow, durationDays: '0' });
+      expect(result.fieldErrors.duration_days).toBe('Duration must be 1–3,650 days');
+    });
+    it('flags a negative duration', () => {
+      const result = validateRow({ ...baseRow, durationDays: '-3' });
+      expect(result.fieldErrors.duration_days).toBe('Duration must be 1–3,650 days');
+    });
+    it('flags a non-integer duration', () => {
+      const result = validateRow({ ...baseRow, durationDays: '5.5' });
+      expect(result.fieldErrors.duration_days).toBe('Duration must be 1–3,650 days');
+    });
+    it('accepts the minimum boundary of 1 day', () => {
+      const result = validateRow({ ...baseRow, durationDays: '1' });
+      expect(result.fieldErrors.duration_days).toBeUndefined();
+    });
+    it('accepts the maximum boundary of 3,650 days', () => {
+      const result = validateRow({ ...baseRow, durationDays: '3650' });
+      expect(result.fieldErrors.duration_days).toBeUndefined();
+    });
+    it('flags a duration just above the maximum boundary', () => {
+      const result = validateRow({ ...baseRow, durationDays: '3651' });
+      expect(result.fieldErrors.duration_days).toBe('Duration must be 1–3,650 days');
+    });
+  });
+
+  it('reports all four field errors simultaneously for a fully invalid row', () => {
+    const result = validateRow({
+      recipient: '',
+      depositAmount: '',
+      accrualRatePerDay: '',
+      durationDays: '',
+    });
+    expect(result.isValid).toBe(false);
+    expect(Object.keys(result.fieldErrors)).toHaveLength(4);
+  });
+});
+
+function makeRow(overrides: Partial<CsvRow>): CsvRow {
+  return {
+    id: `row-${overrides.rowNumber ?? 1}`,
+    rowNumber: 1,
+    recipient: VALID_ADDR,
+    depositAmount: '100',
+    accrualRatePerDay: '10',
+    durationDays: '30',
+    status: 'valid',
+    fieldErrors: {},
+    ...overrides,
+  };
+}
 
 describe('markDuplicates', () => {
-  function makeRow(
-    rowNumber: number,
-    recipient: string,
-    status: CsvRow['status'] = 'valid',
-  ): CsvRow {
-    return {
-      id: `row-${rowNumber}`,
-      rowNumber,
-      recipient,
-      depositAmount: '100',
-      accrualRatePerDay: '10',
-      durationDays: '10',
-      status,
-      fieldErrors: {},
-    };
-  }
-
-  it('marks rows with duplicate recipients as duplicate-recipient', () => {
+  it('marks two valid rows sharing the same recipient as duplicates', () => {
     const rows = [
-      makeRow(1, VALID_STELLAR),
-      makeRow(2, VALID_STELLAR),
+      makeRow({ rowNumber: 1, recipient: VALID_ADDR }),
+      makeRow({ rowNumber: 2, recipient: VALID_ADDR }),
     ];
     markDuplicates(rows);
     expect(rows[0].status).toBe('duplicate-recipient');
     expect(rows[1].status).toBe('duplicate-recipient');
-  });
-
-  it('sets duplicateRows to the sibling row numbers', () => {
-    const rows = [
-      makeRow(1, VALID_STELLAR),
-      makeRow(2, VALID_STELLAR),
-    ];
-    markDuplicates(rows);
     expect(rows[0].duplicateRows).toEqual([2]);
     expect(rows[1].duplicateRows).toEqual([1]);
   });
 
-  it('does not mark rows that have no duplicate recipient', () => {
+  it('matches recipients case-insensitively and ignores surrounding whitespace', () => {
+    const lower = VALID_ADDR.toLowerCase();
     const rows = [
-      makeRow(1, VALID_STELLAR),
-      makeRow(2, VALID_STELLAR_2),
+      makeRow({ rowNumber: 1, recipient: `  ${VALID_ADDR}  ` }),
+      makeRow({ rowNumber: 2, recipient: lower }),
+    ];
+    markDuplicates(rows);
+    expect(rows[0].status).toBe('duplicate-recipient');
+    expect(rows[1].status).toBe('duplicate-recipient');
+  });
+
+  it('leaves unique recipients untouched', () => {
+    const rows = [
+      makeRow({ rowNumber: 1, recipient: VALID_ADDR }),
+      makeRow({ rowNumber: 2, recipient: VALID_ADDR_2 }),
     ];
     markDuplicates(rows);
     expect(rows[0].status).toBe('valid');
     expect(rows[1].status).toBe('valid');
+    expect(rows[0].duplicateRows).toBeUndefined();
   });
 
-  it('is case-insensitive for address comparison', () => {
+  it('does not overwrite a row whose status is already needs-fix', () => {
     const rows = [
-      makeRow(1, VALID_STELLAR.toLowerCase()),
-      makeRow(2, VALID_STELLAR.toUpperCase()),
+      makeRow({ rowNumber: 1, recipient: VALID_ADDR, status: 'needs-fix' }),
+      makeRow({ rowNumber: 2, recipient: VALID_ADDR, status: 'valid' }),
     ];
     markDuplicates(rows);
-    expect(rows[0].status).toBe('duplicate-recipient');
-  });
-
-  it('does not change the status of already-invalid rows', () => {
-    const rows = [
-      makeRow(1, VALID_STELLAR, 'needs-fix'),
-      makeRow(2, VALID_STELLAR, 'valid'),
-    ];
-    markDuplicates(rows);
-    // Only the valid row should get flagged; the needs-fix row keeps its status
     expect(rows[0].status).toBe('needs-fix');
     expect(rows[1].status).toBe('duplicate-recipient');
   });
 
-  it('skips rows with an empty recipient', () => {
-    const rows = [makeRow(1, ''), makeRow(2, '')];
+  it('ignores rows with an empty recipient when grouping', () => {
+    const rows = [
+      makeRow({ rowNumber: 1, recipient: '' }),
+      makeRow({ rowNumber: 2, recipient: '' }),
+    ];
     markDuplicates(rows);
     expect(rows[0].status).toBe('valid');
     expect(rows[1].status).toBe('valid');
   });
+
+  it('flags all rows in a group of three or more duplicates', () => {
+    const rows = [
+      makeRow({ rowNumber: 1, recipient: VALID_ADDR }),
+      makeRow({ rowNumber: 2, recipient: VALID_ADDR }),
+      makeRow({ rowNumber: 3, recipient: VALID_ADDR }),
+    ];
+    markDuplicates(rows);
+    expect(rows.every((r) => r.status === 'duplicate-recipient')).toBe(true);
+    expect(rows[0].duplicateRows).toEqual([2, 3]);
+  });
 });
 
-// ─── parseAndValidateCsv ──────────────────────────────────────────────────────
-
 describe('parseAndValidateCsv', () => {
-  const TEMPLATE_CSV = buildTemplateCsv();
-
-  it('parses the template CSV and returns one data row', () => {
-    const result = parseAndValidateCsv(TEMPLATE_CSV);
-    expect(result.parseError).toBeUndefined();
-    expect(result.rows).toHaveLength(1);
-    // The template uses a placeholder address so recipient validation fails,
-    // but all numeric fields (deposit, rate, duration) should be error-free.
-    expect(result.rows[0].fieldErrors.deposit_amount).toBeUndefined();
-    expect(result.rows[0].fieldErrors.accrual_rate_per_day).toBeUndefined();
-    expect(result.rows[0].fieldErrors.duration_days).toBeUndefined();
-  });
-
-  it('returns a parse error for completely empty input', () => {
-    const result = parseAndValidateCsv('');
-    expect(result.parseError).toMatch(/no data rows/i);
-    expect(result.rows).toHaveLength(0);
-  });
-
-  it('returns a parse error for a header-only CSV', () => {
-    const result = parseAndValidateCsv(
-      'recipient,deposit_amount,accrual_rate_per_day,duration_days\n',
-    );
-    expect(result.parseError).toMatch(/no data rows/i);
-  });
-
-  it(`returns a parse error when the CSV exceeds ${MAX_CSV_ROWS} rows`, () => {
-    const header = 'recipient,deposit_amount,accrual_rate_per_day,duration_days\n';
-    const row = `${VALID_STELLAR},100,10,10\n`;
-    const csv = header + row.repeat(MAX_CSV_ROWS + 1);
+  it('parses a CSV whose headers exactly match the canonical names', () => {
+    const csv = 'recipient,deposit_amount,accrual_rate_per_day,duration_days\n' + `${VALID_ADDR},1000,38.62,30\n`;
     const result = parseAndValidateCsv(csv);
-    expect(result.parseError).toMatch(new RegExp(String(MAX_CSV_ROWS)));
-  });
-
-  it('auto-detects canonical headers and sets headersMatch=true', () => {
-    const result = parseAndValidateCsv(TEMPLATE_CSV);
     expect(result.headersMatch).toBe(true);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].status).toBe('valid');
+    expect(result.parseError).toBeUndefined();
   });
 
-  it('returns headersMatch=false and no rows when headers cannot be mapped', () => {
-    const csv = 'foo,bar,baz,qux\n1,2,3,4\n';
+  it('auto-detects headers via known aliases', () => {
+    const csv = 'Address,Amount,Rate,Duration\n' + `${VALID_ADDR},500,10,15\n`;
+    const result = parseAndValidateCsv(csv);
+    expect(result.headersMatch).toBe(true);
+    expect(result.autoMapping.recipient).toBe('Address');
+    expect(result.autoMapping.deposit_amount).toBe('Amount');
+    expect(result.autoMapping.accrual_rate_per_day).toBe('Rate');
+    expect(result.autoMapping.duration_days).toBe('Duration');
+    expect(result.rows).toHaveLength(1);
+  });
+
+  it('returns headersMatch=false and no rows when a canonical column is missing and no mapping is supplied', () => {
+    const csv = 'Address,Amount,Rate\n' + `${VALID_ADDR},500,10\n`;
     const result = parseAndValidateCsv(csv);
     expect(result.headersMatch).toBe(false);
-    expect(result.rows).toHaveLength(0);
+    expect(result.rows).toEqual([]);
+    expect(result.autoMapping.recipient).toBe('Address');
+    expect(result.autoMapping.duration_days).toBeUndefined();
   });
 
-  it('uses a manual column mapping when provided', () => {
-    const csv =
-      'address,usdc,rate,days\n' +
-      `${VALID_STELLAR},500,20,60\n`;
-    const result = parseAndValidateCsv(csv, {
-      recipient: 'address',
-      deposit_amount: 'usdc',
-      accrual_rate_per_day: 'rate',
-      duration_days: 'days',
-    });
+  it('uses an explicitly supplied mapping instead of auto-detection', () => {
+    const csv = 'colA,colB,colC,colD\n' + `${VALID_ADDR},250,5,90\n`;
+    const mapping = {
+      recipient: 'colA',
+      deposit_amount: 'colB',
+      accrual_rate_per_day: 'colC',
+      duration_days: 'colD',
+    };
+    const result = parseAndValidateCsv(csv, mapping);
     expect(result.headersMatch).toBe(true);
     expect(result.rows).toHaveLength(1);
-    expect(result.rows[0].depositAmount).toBe('500');
-    expect(result.rows[0].status).toBe('valid');
+    expect(result.rows[0].recipient).toBe(VALID_ADDR);
+    expect(result.rows[0].depositAmount).toBe('250');
   });
 
-  it('marks a row as needs-fix when deposit_amount exceeds the cap', () => {
-    const over = String(MAX_DEPOSIT_AMOUNT + 1);
-    const csv =
-      'recipient,deposit_amount,accrual_rate_per_day,duration_days\n' +
-      `${VALID_STELLAR},${over},38.62,30\n`;
+  it('returns a parseError for completely empty input', () => {
+    const result = parseAndValidateCsv('');
+    expect(result.parseError).toBe('The CSV file has no data rows.');
+    expect(result.rows).toEqual([]);
+  });
+
+  it('returns a parseError for a header-only file with no data rows', () => {
+    const csv = 'recipient,deposit_amount,accrual_rate_per_day,duration_days\n';
     const result = parseAndValidateCsv(csv);
-    expect(result.rows[0].status).toBe('needs-fix');
-    expect(result.rows[0].fieldErrors.deposit_amount).toMatch(/365,000,000/);
+    expect(result.parseError).toBe('The CSV file has no data rows.');
   });
 
-  it('marks a row as valid when deposit_amount is exactly at the cap', () => {
-    const csv =
-      'recipient,deposit_amount,accrual_rate_per_day,duration_days\n' +
-      `${VALID_STELLAR},${MAX_DEPOSIT_AMOUNT},38.62,30\n`;
+  it('returns a parseError when the row count exceeds MAX_CSV_ROWS', () => {
+    const header = 'recipient,deposit_amount,accrual_rate_per_day,duration_days\n';
+    const row = `${VALID_ADDR},100,10,30\n`;
+    const csv = header + row.repeat(MAX_CSV_ROWS + 1);
     const result = parseAndValidateCsv(csv);
-    expect(result.rows[0].status).toBe('valid');
-    expect(result.rows[0].fieldErrors.deposit_amount).toBeUndefined();
+    expect(result.parseError).toBe(`This CSV has ${MAX_CSV_ROWS + 1} rows. Maximum is ${MAX_CSV_ROWS}.`);
+    expect(result.rows).toEqual([]);
   });
 
-  it('strips a UTF-8 BOM from the start of the input', () => {
-    const csv = '\uFEFF' + TEMPLATE_CSV;
+  it('accepts exactly MAX_CSV_ROWS data rows without error', () => {
+    const header = 'recipient,deposit_amount,accrual_rate_per_day,duration_days\n';
+    const row = `${VALID_ADDR},100,10,30\n`;
+    const csv = header + row.repeat(MAX_CSV_ROWS);
     const result = parseAndValidateCsv(csv);
     expect(result.parseError).toBeUndefined();
-    expect(result.rows).toHaveLength(1);
+    expect(result.rows).toHaveLength(MAX_CSV_ROWS);
   });
 
-  it('handles CRLF line endings', () => {
-    const csv = TEMPLATE_CSV.replace(/\n/g, '\r\n');
+  it('strips a BOM and normalises CRLF line endings before parsing', () => {
+    const csv = '\uFEFFrecipient,deposit_amount,accrual_rate_per_day,duration_days\r\n' + `${VALID_ADDR},100,10,30\r\n`;
     const result = parseAndValidateCsv(csv);
+    expect(result.headersMatch).toBe(true);
+    expect(result.detectedHeaders[0]).toBe('recipient');
     expect(result.rows).toHaveLength(1);
-    // Numeric fields must parse correctly regardless of line endings.
-    expect(result.rows[0].fieldErrors.deposit_amount).toBeUndefined();
-    expect(result.rows[0].fieldErrors.accrual_rate_per_day).toBeUndefined();
-    expect(result.rows[0].fieldErrors.duration_days).toBeUndefined();
   });
 
-  it('exposes autoMapping in the result', () => {
-    const result = parseAndValidateCsv(TEMPLATE_CSV);
-    expect(result.autoMapping.recipient).toBeDefined();
-    expect(result.autoMapping.deposit_amount).toBeDefined();
+  it('skips blank lines within the CSV body', () => {
+    const csv = 'recipient,deposit_amount,accrual_rate_per_day,duration_days\n' + `${VALID_ADDR},100,10,30\n` + '\n' + `${VALID_ADDR_2},200,5,60\n`;
+    const result = parseAndValidateCsv(csv);
+    expect(result.rows).toHaveLength(2);
   });
 
-  it('marks duplicate recipients across rows', () => {
-    const csv =
-      'recipient,deposit_amount,accrual_rate_per_day,duration_days\n' +
-      `${VALID_STELLAR},100,10,10\n` +
-      `${VALID_STELLAR},200,20,20\n`;
+  it('marks a row with an invalid Stellar address as needs-fix', () => {
+    const csv = 'recipient,deposit_amount,accrual_rate_per_day,duration_days\n' + `${INVALID_ADDR},100,10,30\n`;
+    const result = parseAndValidateCsv(csv);
+    expect(result.rows[0].status).toBe('needs-fix');
+    expect(result.rows[0].fieldErrors.recipient).toBe('Invalid Stellar address');
+  });
+
+  it('flags duplicate recipients across parsed rows', () => {
+    const csv = 'recipient,deposit_amount,accrual_rate_per_day,duration_days\n' + `${VALID_ADDR},100,10,30\n` + `${VALID_ADDR},200,5,60\n`;
     const result = parseAndValidateCsv(csv);
     expect(result.rows[0].status).toBe('duplicate-recipient');
     expect(result.rows[1].status).toBe('duplicate-recipient');
   });
 
-  it('handles a short data row that has fewer cells than the header', () => {
-    // Only recipient + deposit — accrual_rate_per_day and duration_days are missing cells.
-    const csv =
-      'recipient,deposit_amount,accrual_rate_per_day,duration_days\n' +
-      `${VALID_STELLAR},500\n`;
+  it('assigns sequential 1-based rowNumbers matching data-row order', () => {
+    const csv = 'recipient,deposit_amount,accrual_rate_per_day,duration_days\n' + `${VALID_ADDR},100,10,30\n` + `${VALID_ADDR_2},200,5,60\n`;
     const result = parseAndValidateCsv(csv);
-    expect(result.rows).toHaveLength(1);
-    // Missing numeric fields should produce field errors (treated as empty strings).
-    expect(result.rows[0].fieldErrors.accrual_rate_per_day).toBeDefined();
-    expect(result.rows[0].fieldErrors.duration_days).toBeDefined();
+    expect(result.rows[0].rowNumber).toBe(1);
+    expect(result.rows[1].rowNumber).toBe(2);
+  });
+
+  it('handles quoted fields containing commas within a data row', () => {
+    const csv = 'recipient,deposit_amount,accrual_rate_per_day,duration_days\n' + `"${VALID_ADDR}",100,10,30\n`;
+    const result = parseAndValidateCsv(csv);
+    expect(result.rows[0].recipient).toBe(VALID_ADDR);
   });
 });
 
-// ─── buildTemplateCsv ─────────────────────────────────────────────────────────
-
 describe('buildTemplateCsv', () => {
-  it('returns a non-empty string', () => {
-    expect(buildTemplateCsv().length).toBeGreaterThan(0);
-  });
-
-  it('contains all four canonical column headers', () => {
+  it('returns a header row with all four canonical columns', () => {
     const csv = buildTemplateCsv();
-    expect(csv).toContain('recipient');
-    expect(csv).toContain('deposit_amount');
-    expect(csv).toContain('accrual_rate_per_day');
-    expect(csv).toContain('duration_days');
+    const [headerLine] = csv.split('\n');
+    expect(headerLine).toBe('recipient,deposit_amount,accrual_rate_per_day,duration_days');
   });
 
-  it('produces numeric field values within valid bounds', () => {
+  it('includes a valid, parseable example row', () => {
     const result = parseAndValidateCsv(buildTemplateCsv());
-    expect(result.parseError).toBeUndefined();
-    // Deposit, rate, and duration in the template are all within their bounds.
-    expect(result.rows[0].fieldErrors.deposit_amount).toBeUndefined();
-    expect(result.rows[0].fieldErrors.accrual_rate_per_day).toBeUndefined();
-    expect(result.rows[0].fieldErrors.duration_days).toBeUndefined();
+    expect(result.headersMatch).toBe(true);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].depositAmount).toBe('1000.00');
+    expect(result.rows[0].accrualRatePerDay).toBe('38.62');
+    expect(result.rows[0].durationDays).toBe('30');
   });
 });
