@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLiveAnnouncer } from "../../hooks/useLiveAnnouncer";
+import { useI18n } from "../../i18n";
 import {
   VoiceState,
   VoiceCommandDef,
@@ -68,6 +69,10 @@ export const VoiceProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const navigate = useNavigate();
   const { announce } = useLiveAnnouncer();
+  const { locale } = useI18n();
+
+  // Map i18n locale to a BCP-47 speech-recognition tag.
+  const speechLang = locale === "es" ? "es-ES" : "en-US";
 
   const [state, setState] = useState<VoiceState>("idle");
   const [isSupported, setIsSupported] = useState<boolean>(true);
@@ -245,7 +250,7 @@ export const VoiceProvider: React.FC<{ children: React.ReactNode }> = ({
       const recognition = new SpeechRecognitionClass();
       recognition.continuous = true;
       recognition.interimResults = true;
-      recognition.lang = "en-US";
+      recognition.lang = speechLang;
 
       recognition.onstart = () => {
         setState("listening");
