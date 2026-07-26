@@ -17,18 +17,10 @@ import { CANONICAL_HEADERS } from './types';
 export const MAX_CSV_ROWS = 500;
 
 /**
- * Maximum allowed deposit amount per CSV row (USDC).
- *
- * Aligned with the single-stream creation cap in CreateStreamModal.tsx:
- *   MAX_ACCRUAL_RATE (100,000 USDC/day) × MAX_DURATION_DAYS (3,650 days)
- *   = 365,000,000 USDC
- *
- * Any deposit above this ceiling is almost certainly a fat-finger or a
- * cell-reference error in the uploaded spreadsheet; rejecting it here caps
- * the blast radius before the value reaches handleBulkSubmit's on-chain
- * amount calculation.
+ * Max upload size checked in CsvDropZone before `file.text()`.
+ * Sized generously for {@link MAX_CSV_ROWS} short rows (~20× a typical 500-row export).
  */
-export const MAX_DEPOSIT_AMOUNT = 365_000_000;
+export const MAX_CSV_FILE_SIZE_BYTES = 1_048_576; // 1 MiB
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
