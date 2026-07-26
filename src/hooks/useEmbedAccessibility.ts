@@ -51,34 +51,8 @@ export function useEmbedAccessibility({
     const originalLang = html.getAttribute('lang') || 'en';
     html.setAttribute('lang', 'en');
     
-    // Announce widget load to screen readers
-    const announceToScreenReader = () => {
-      const announcer = document.getElementById('embed-accessibility-announcer');
-      if (announcer) {
-        announcer.textContent = `Widget loaded: ${title}`;
-      }
-    };
-    
-    // Create screen reader announcer if it doesn't exist
-    let announcer = document.getElementById('embed-accessibility-announcer');
-    if (!announcer) {
-      announcer = document.createElement('div');
-      announcer.id = 'embed-accessibility-announcer';
-      announcer.style.position = 'absolute';
-      announcer.style.width = '1px';
-      announcer.style.height = '1px';
-      announcer.style.padding = '0';
-      announcer.style.margin = '-1px';
-      announcer.style.overflow = 'hidden';
-      announcer.style.clip = 'rect(0, 0, 0, 0)';
-      announcer.style.whiteSpace = 'nowrap';
-      announcer.style.borderWidth = '0';
-      announcer.setAttribute('aria-live', 'polite');
-      announcer.setAttribute('aria-atomic', 'true');
-      document.body.appendChild(announcer);
-    }
-    
-    announceToScreenReader();
+    // Announce widget load to screen readers using a per-instance announcer
+    const cleanupAnnouncer = announceToScreenReader(`Widget loaded: ${title}`);
     
     // Set focus to widget container for keyboard users
     const widgetContainer = document.querySelector('[role="article"], main');
@@ -108,6 +82,8 @@ export function useEmbedAccessibility({
       if (widgetContainer) {
         widgetContainer.removeAttribute('tabindex');
       }
+
+      cleanupAnnouncer();
     };
   }, [title, description, isMainContent]);
 }
@@ -196,15 +172,30 @@ export function createAccessibleWidgetContainer(
   };
 }
 
+let announcerInstanceId = 0;
+
 /**
- * Announces a message to screen readers
+ * Announces a message to screen readers.
+ *
+ * Returns a cleanup function that removes the live-region node and cancels any
+ * pending clear timer so the announcer does not outlive its owner.
  */
-export function announceToScreenReader(message: string, priority: 'polite' | 'assertive' = 'polite'): void {
-  let announcer = document.getElementById('embed-accessibility-announcer');
-  
+export function announceToScreenReader(
+  message: string,
+  priority: 'polite' | 'assertive' = 'polite',
+  options: { container?: HTMLElement | null; id?: string } = {}
+): () => void {
+  const container = options.container ?? document.body;
+  if (!container) {
+    return () => undefined;
+  }
+
+  const announcerId = options.id ?? `embed-accessibility-announcer-${++announcerInstanceId}`;
+  let announcer = container.querySelector<HTMLElement>(`#${announcerId}`);
+
   if (!announcer) {
     announcer = document.createElement('div');
-    announcer.id = 'embed-accessibility-announcer';
+    announcer.id = announcerId;
     announcer.style.position = 'absolute';
     announcer.style.width = '1px';
     announcer.style.height = '1px';
@@ -216,19 +207,25 @@ export function announceToScreenReader(message: string, priority: 'polite' | 'as
     announcer.style.borderWidth = '0';
     announcer.setAttribute('aria-live', priority);
     announcer.setAttribute('aria-atomic', 'true');
-    document.body.appendChild(announcer);
+    container.appendChild(announcer);
   } else {
     announcer.setAttribute('aria-live', priority);
   }
-  
+
   announcer.textContent = message;
-  
-  // Clear message after a delay to allow re-announcement
-  setTimeout(() => {
-    if (announcer && announcer.textContent === message) {
+
+  const timeoutId = window.setTimeout(() => {
+    if (announcer?.isConnected && announcer.textContent === message) {
       announcer.textContent = '';
     }
   }, 1000);
+
+  return () => {
+    window.clearTimeout(timeoutId);
+    if (announcer?.isConnected) {
+      announcer.remove();
+    }
+  };
 }
 
 /**

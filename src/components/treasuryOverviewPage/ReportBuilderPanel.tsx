@@ -67,8 +67,9 @@ export default function ReportBuilderPanel({ streams, onClose }: ReportBuilderPa
 
   return (
     <div
-      className="p-6 bg-white rounded-lg mb-8"
+      className="p-6 rounded-lg mb-8"
       style={{
+        backgroundColor: "var(--color-bg-primary)",
         border: "1px solid var(--color-border-default)",
         boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
       }}
@@ -142,8 +143,8 @@ export default function ReportBuilderPanel({ streams, onClose }: ReportBuilderPa
               id="grouping"
               value={grouping}
               onChange={(e) => setGrouping(e.target.value as Grouping)}
-              className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent-primary)] bg-white"
-              style={{ borderColor: "var(--color-border-default)" }}
+              className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent-primary)]"
+              style={{ borderColor: "var(--color-border-default)", backgroundColor: "var(--color-bg-primary)", color: "var(--color-text-primary)" }}
             >
               <option value="None">None</option>
               <option value="Recipient">By Recipient</option>
@@ -188,8 +189,8 @@ export default function ReportBuilderPanel({ streams, onClose }: ReportBuilderPa
           style={{ border: "1px solid var(--color-border-default)" }}
         >
           {isPreviewLoading && (
-            <div className="absolute inset-0 bg-white/70 flex items-center justify-center z-10">
-              <span className="text-sm font-medium text-[var(--color-text-secondary)]">Updating preview...</span>
+            <div className="absolute inset-0 flex items-center justify-center z-10" style={{ backgroundColor: "var(--color-bg-primary)", opacity: 0.9 }}>
+              <span className="text-sm font-medium text-[var(--color-text-primary)]">Updating preview...</span>
             </div>
           )}
           <table className="w-full text-left border-collapse">
