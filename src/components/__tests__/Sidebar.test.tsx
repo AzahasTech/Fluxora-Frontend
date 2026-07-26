@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { Profiler, type ProfilerOnRenderCallback } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Sidebar from "../Sidebar";
+import { VoiceProvider } from "../voice/VoiceContext";
 import {
   BREAKPOINT_MD,
   VIEWPORT_RESIZE_DEBOUNCE_MS,
@@ -53,12 +54,14 @@ function getSidebar() {
 
 function renderSidebar(mobileOpen = false, onRender?: ProfilerOnRenderCallback) {
   const sidebar = (
-    <Sidebar
-      collapsed={false}
-      onToggleCollapse={vi.fn()}
-      mobileOpen={mobileOpen}
-      onMobileClose={vi.fn()}
-    />
+    <VoiceProvider>
+      <Sidebar
+        collapsed={false}
+        onToggleCollapse={vi.fn()}
+        mobileOpen={mobileOpen}
+        onMobileClose={vi.fn()}
+      />
+    </VoiceProvider>
   );
 
   if (onRender) {
@@ -229,15 +232,31 @@ describe("Sidebar collapse toggle accessibility & keyboard interaction", () => {
     vi.restoreAllMocks();
   });
 
+  function renderSidebarWithProviders(props: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
+    return render(
+      <VoiceProvider>
+        <Sidebar
+          collapsed={false}
+          onToggleCollapse={vi.fn()}
+          mobileOpen={false}
+          onMobileClose={vi.fn()}
+          {...props}
+        />
+      </VoiceProvider>
+    );
+  }
+
   it("renders a real button with correct aria-expanded state and dynamic accessible name", () => {
     const onToggleCollapse = vi.fn();
     const { rerender } = render(
-      <Sidebar
-        collapsed={false}
-        onToggleCollapse={onToggleCollapse}
-        mobileOpen={false}
-        onMobileClose={vi.fn()}
-      />
+      <VoiceProvider>
+        <Sidebar
+          collapsed={false}
+          onToggleCollapse={onToggleCollapse}
+          mobileOpen={false}
+          onMobileClose={vi.fn()}
+        />
+      </VoiceProvider>
     );
 
     const toggleButton = document.querySelector('button[aria-controls="app-sidebar"]');
@@ -247,12 +266,14 @@ describe("Sidebar collapse toggle accessibility & keyboard interaction", () => {
     expect(toggleButton).toHaveAttribute("aria-label", "Collapse sidebar");
 
     rerender(
-      <Sidebar
-        collapsed={true}
-        onToggleCollapse={onToggleCollapse}
-        mobileOpen={false}
-        onMobileClose={vi.fn()}
-      />
+      <VoiceProvider>
+        <Sidebar
+          collapsed={true}
+          onToggleCollapse={onToggleCollapse}
+          mobileOpen={false}
+          onMobileClose={vi.fn()}
+        />
+      </VoiceProvider>
     );
 
     expect(toggleButton).toHaveAttribute("aria-expanded", "false");
@@ -261,14 +282,12 @@ describe("Sidebar collapse toggle accessibility & keyboard interaction", () => {
 
   it("toggles sidebar on mouse click and keyboard activation (Enter/Space)", () => {
     const onToggleCollapse = vi.fn();
-    render(
-      <Sidebar
-        collapsed={false}
-        onToggleCollapse={onToggleCollapse}
-        mobileOpen={false}
-        onMobileClose={vi.fn()}
-      />
-    );
+    renderSidebarWithProviders({
+      collapsed: false,
+      onToggleCollapse,
+      mobileOpen: false,
+      onMobileClose: vi.fn(),
+    });
 
     const toggleButton = document.querySelector('button[aria-controls="app-sidebar"]') as HTMLButtonElement;
     expect(toggleButton).toBeTruthy();
@@ -290,12 +309,14 @@ describe("Sidebar collapse toggle accessibility & keyboard interaction", () => {
 
   it("maintains sane tab order in both expanded and collapsed states", () => {
     const { rerender } = render(
-      <Sidebar
-        collapsed={false}
-        onToggleCollapse={vi.fn()}
-        mobileOpen={false}
-        onMobileClose={vi.fn()}
-      />
+      <VoiceProvider>
+        <Sidebar
+          collapsed={false}
+          onToggleCollapse={vi.fn()}
+          mobileOpen={false}
+          onMobileClose={vi.fn()}
+        />
+      </VoiceProvider>
     );
 
     const sidebar = getSidebar();
@@ -318,12 +339,14 @@ describe("Sidebar collapse toggle accessibility & keyboard interaction", () => {
 
     // Rerender collapsed
     rerender(
-      <Sidebar
-        collapsed={true}
-        onToggleCollapse={vi.fn()}
-        mobileOpen={false}
-        onMobileClose={vi.fn()}
-      />
+      <VoiceProvider>
+        <Sidebar
+          collapsed={true}
+          onToggleCollapse={vi.fn()}
+          mobileOpen={false}
+          onMobileClose={vi.fn()}
+        />
+      </VoiceProvider>
     );
 
     const collapsedFocusables = getFocusableItems();
@@ -346,12 +369,14 @@ describe("Sidebar collapse toggle accessibility & keyboard interaction", () => {
   it("handles mobile drawer Escape key and focus trapping", () => {
     const onMobileClose = vi.fn();
     render(
-      <Sidebar
-        collapsed={false}
-        onToggleCollapse={vi.fn()}
-        mobileOpen={true}
-        onMobileClose={onMobileClose}
-      />
+      <VoiceProvider>
+        <Sidebar
+          collapsed={false}
+          onToggleCollapse={vi.fn()}
+          mobileOpen={true}
+          onMobileClose={onMobileClose}
+        />
+      </VoiceProvider>
     );
 
     // Press Escape key
@@ -415,12 +440,14 @@ describe("Sidebar collapse toggle accessibility & keyboard interaction", () => {
   it("triggers onMobileClose when logo, close button, backdrop, or nav links are clicked", () => {
     const onMobileClose = vi.fn();
     const { container } = render(
-      <Sidebar
-        collapsed={false}
-        onToggleCollapse={vi.fn()}
-        mobileOpen={true}
-        onMobileClose={onMobileClose}
-      />
+      <VoiceProvider>
+        <Sidebar
+          collapsed={false}
+          onToggleCollapse={vi.fn()}
+          mobileOpen={true}
+          onMobileClose={onMobileClose}
+        />
+      </VoiceProvider>
     );
 
     // Logo click
