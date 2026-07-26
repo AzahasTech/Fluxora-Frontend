@@ -667,6 +667,12 @@ export default function CreateStreamModal({
     if (recipientError || depositError || rateError || durationError || depositTooLarge || customDateError || cliffError) {
       return false;
     }
+
+    if (contrastState === 'AA-fail-blocked') {
+      setError("Please select a high-contrast label color or check 'Use anyway' to proceed.");
+      return false;
+    }
+
     return true;
   };
 
