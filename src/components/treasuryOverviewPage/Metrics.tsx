@@ -4,6 +4,7 @@ import { Metric } from "./Metric";
 import { useWidgetLayout, slugify } from "./useWidgetLayout";
 import WidgetTray from "./WidgetTray";
 import { WidgetConfig } from "./widgetLayout";
+import "./Metrics.css";
 
 interface MetricsProps {
   metrics: Metric[];
@@ -279,9 +280,12 @@ export default function Metrics({ metrics, loading, error }: MetricsProps) {
       </div>
 
       <section
+        className="metrics-grid-container"
         aria-label="Treasury metrics"
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 items-stretch"
       >
+        <div
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 items-stretch"
+        >
         {visible.length > 0 ? (
           visible.map((item, idx) => {
             const isDragging = draggedId === item.config.id;
@@ -373,6 +377,7 @@ export default function Metrics({ metrics, loading, error }: MetricsProps) {
             No treasury metrics available.
           </p>
         )}
+        </div>
       </section>
 
       {/* Widget Tray panel for customization */}
