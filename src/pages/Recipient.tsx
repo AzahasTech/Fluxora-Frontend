@@ -95,7 +95,7 @@ export function getRecipientPageTitle(
 ): string {
   if (isTabFocused || count <= 0) return RECIPIENT_PAGE_TITLE;
 
-  const displayCount = count >= 9 ? "9+" : count.toString();
+  const displayCount = count > 9 ? "9+" : count.toString();
   return `(${displayCount}) ${RECIPIENT_PAGE_TITLE}`;
 }
 

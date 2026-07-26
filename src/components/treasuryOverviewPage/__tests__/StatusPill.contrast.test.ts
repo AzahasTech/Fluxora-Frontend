@@ -1,5 +1,10 @@
 import { describe, test, expect } from 'vitest';
-import { getContrastRatio } from '../../../utils/contrastUtils';
+import {
+  getContrastRatio,
+  simulatedContrastRatio,
+  THEME_BACKGROUNDS,
+  type ColorBlindType,
+} from '../../../utils/contrastUtils';
 
 type Variant = {
   name: string;
@@ -31,6 +36,29 @@ describe.skip('StatusPill contrast ratios', () => {
       const bgHex = `#${Number(r).toString(16).padStart(2, '0')}${Number(g).toString(16).padStart(2, '0')}${Number(b).toString(16).padStart(2, '0')}`;
       const ratio = getContrastRatio(v.textColor, bgHex);
       expect(ratio).toBeGreaterThanOrEqual(4.5);
+    });
+  });
+});
+
+describe('StatusPill color-blind simulated contrast ratios', () => {
+  const darkBg = THEME_BACKGROUNDS.dark; // '#0a0e17'
+  const statusTokens = [
+    { name: 'status-success', fg: '#1ec98e' },
+    { name: 'status-warning', fg: '#ffa726' },
+    { name: 'status-error', fg: '#ff6b6b' },
+    { name: 'status-info', fg: '#00b8d4' },
+  ];
+  const filters: ColorBlindType[] = ['protanopia', 'deuteranopia', 'tritanopia'];
+
+  filters.forEach((filter) => {
+    describe(`under ${filter} simulation`, () => {
+      statusTokens.forEach(({ name, fg }) => {
+        test(`${name} (${fg}) computes a valid simulated contrast ratio against dark theme background`, () => {
+          const ratio = simulatedContrastRatio(fg, darkBg, filter);
+          expect(ratio).not.toBeNull();
+          expect(ratio!).toBeGreaterThan(1.0);
+        });
+      });
     });
   });
 });
