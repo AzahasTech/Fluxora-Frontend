@@ -297,6 +297,7 @@ export default function StreamRow({
           className="py-4 px-3"
           style={{ width: "2.5rem" }}
           onClick={(e) => e.stopPropagation()}
+          data-label=""
         >
           <input
             type="checkbox"
@@ -313,7 +314,7 @@ export default function StreamRow({
         </td>
       )}
 
-      <td className="py-4 px-3">
+      <td className="py-4 px-3" data-label="STREAM">
         <div
           className="font-medium"
           style={{ color: "var(--color-text-primary)" }}
@@ -327,6 +328,7 @@ export default function StreamRow({
 
       <td
         className="py-4 px-3"
+        data-label="RECIPIENT"
         style={{ color: "var(--color-text-primary)" }}
         title={stream.recipient}
         aria-label={`Recipient ${stream.recipient}`}
@@ -334,7 +336,7 @@ export default function StreamRow({
         {recipientLabel}
       </td>
 
-      <td className="py-4 px-3" style={{ color: "var(--color-text-primary)" }}>
+      <td className="py-4 px-3" data-label="RATE" style={{ color: "var(--color-text-primary)" }}>
         <div>{stream.rate}</div>
         {typeof stream.accruedAmount === "number" && (
           <div className="text-xs" style={{ color: "var(--color-text-muted)" }}>
@@ -343,11 +345,11 @@ export default function StreamRow({
         )}
       </td>
 
-      <td className="stream-row__cell py-4 px-3">
+      <td className="stream-row__cell py-4 px-3" data-label="STATUS">
         <StatusPill status={stream.status} />
       </td>
 
-      <td className="stream-row__cell py-4 px-3">
+      <td className="stream-row__cell py-4 px-3" data-label="ACTION">
         <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
           <button
             type="button"

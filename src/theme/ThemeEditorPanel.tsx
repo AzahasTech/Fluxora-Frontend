@@ -8,7 +8,8 @@
  *   - Contrast failures surface as role="alert" live regions.
  *   - Full keyboard operability: Tab/Shift-Tab through fields,
  *     Enter/Space to toggle preview, apply, and cancel.
- *   - Focus is trapped inside the panel when rendered as a modal.
+ *   - Focus is trapped inside the panel (useModalAccessibility) with
+ *     aria-modal="true" on the dialog container.
  *   - Colour pickers fall back to hex text inputs for keyboard entry.
  *   - prefers-reduced-motion: no animated transitions on token updates.
  *   - Responsive: single-column at 375 px, two-column at 768 px,
@@ -27,9 +28,9 @@ import {
   useState,
   type ChangeEvent,
   type FormEvent,
-  type KeyboardEvent,
 } from "react";
 import { useTheme } from "./ThemeProvider";
+import { useModalAccessibility } from "../components/useModalAccessibility";
 import {
   contrastRatio,
   isValidHex,
@@ -541,8 +542,8 @@ export interface ThemeEditorPanelProps {
  * Admin surface for registering an org-branded custom theme.
  * Renders a form + live preview. Wires directly to useTheme().
  *
- * Keyboard walkthrough:
- *   Tab / Shift-Tab  — cycle through all form fields and buttons
+ * Keyboard walkthrough (via useModalAccessibility):
+ *   Tab / Shift-Tab  — cycle through all form fields and buttons (focus trap)
  *   Enter / Space    — activate focused button
  *   Escape           — cancel preview and close (if onClose provided)
  *
@@ -562,6 +563,7 @@ export default function ThemeEditorPanel({ onClose }: ThemeEditorPanelProps) {
   } = useTheme();
 
   const formRef = useRef<HTMLFormElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   // Local draft values — seeded from the current applied theme or defaults.
   const [draft, setDraft] = useState<Partial<Record<AllowedTokenKey, string>>>(
@@ -606,15 +608,12 @@ export default function ThemeEditorPanel({ onClose }: ThemeEditorPanelProps) {
     onClose?.();
   }, [clearCustomTheme, onClose]);
 
-  // Escape key to cancel.
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLDivElement>) => {
-      if (e.key === "Escape") {
-        handleCancel();
-      }
-    },
-    [handleCancel],
-  );
+  // Focus trap, Escape-to-cancel, and aria-modal handled by useModalAccessibility.
+  useModalAccessibility({
+    isOpen: true,
+    onClose: handleCancel,
+    modalRef: panelRef,
+  });
 
   // Group fields.
   const fieldsByGroup = TOKEN_FIELDS.reduce<
@@ -638,9 +637,10 @@ export default function ThemeEditorPanel({ onClose }: ThemeEditorPanelProps) {
   return (
     <div
       role="dialog"
+      aria-modal="true"
       aria-labelledby={labelId}
       aria-describedby={hasErrors ? errSummaryId : undefined}
-      onKeyDown={handleKeyDown}
+      ref={panelRef}
       style={{
         display: "grid",
         gridTemplateColumns: "1fr",

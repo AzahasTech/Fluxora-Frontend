@@ -44,6 +44,17 @@ vi.mock('../../components/treasuryOverviewPage/ActivityHeatmap', () => ({
   ),
 }));
 
+interface TreasuryFlowSankeyPropsMock {
+  streams: Stream[];
+  loading?: boolean;
+  error?: string | null;
+}
+vi.mock('../../components/treasuryOverviewPage/TreasuryFlowSankey', () => ({
+  default: (props: TreasuryFlowSankeyPropsMock) => (
+    <div data-testid="treasury-flow-sankey">Sankey: {JSON.stringify(props.streams)}</div>
+  ),
+}));
+
 // TreasuryPage now reads wallet connection state to thread into RecentStreams.
 const walletState = vi.hoisted(() => ({ connected: false }));
 vi.mock('../../components/wallet-connect/Walletcontext', () => ({
@@ -80,6 +91,7 @@ describe('TreasuryPage', () => {
     expect(screen.queryByTestId('metrics')).toBeNull();
     expect(screen.queryByTestId('streams')).toBeNull();
     expect(screen.queryByTestId('activity-heatmap')).toBeNull();
+    expect(screen.queryByTestId('treasury-flow-sankey')).toBeNull();
   });
 
   it('renders error message and hides content — no fallback to demo data', () => {
@@ -91,6 +103,7 @@ describe('TreasuryPage', () => {
     expect(screen.queryByTestId('metrics')).toBeNull();
     expect(screen.queryByTestId('streams')).toBeNull();
     expect(screen.queryByTestId('activity-heatmap')).toBeNull();
+    expect(screen.queryByTestId('treasury-flow-sankey')).toBeNull();
     // DemoBanner must NOT render on fetch failure — no silent demo-data fallback
     expect(screen.queryByTestId('demo-banner')).toBeNull();
   });
@@ -103,6 +116,7 @@ describe('TreasuryPage', () => {
     expect(screen.getByTestId('metrics')).toHaveTextContent(JSON.stringify(fakeMetrics));
     expect(screen.getByTestId('streams')).toHaveTextContent(JSON.stringify(fakeStreams));
     expect(screen.getByTestId('activity-heatmap')).toHaveTextContent(JSON.stringify(fakeStreams));
+    expect(screen.getByTestId('treasury-flow-sankey')).toHaveTextContent(JSON.stringify(fakeStreams));
     expect(screen.queryByRole('status')).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.queryByTestId('demo-banner')).toBeNull();
@@ -119,6 +133,7 @@ describe('TreasuryPage', () => {
     expect(screen.getByTestId('metrics')).toHaveTextContent(JSON.stringify(fakeMetrics));
     expect(screen.getByTestId('streams')).toHaveTextContent(JSON.stringify(fakeStreams));
     expect(screen.getByTestId('activity-heatmap')).toHaveTextContent(JSON.stringify(fakeStreams));
+    expect(screen.getByTestId('treasury-flow-sankey')).toHaveTextContent(JSON.stringify(fakeStreams));
   });
 
   it('renders DemoBanner when isDemoMode is true during loading', () => {
@@ -146,5 +161,6 @@ describe('TreasuryPage', () => {
     expect(screen.getByTestId('metrics')).toHaveTextContent(JSON.stringify([]));
     expect(screen.getByTestId('streams')).toHaveTextContent(JSON.stringify([]));
     expect(screen.getByTestId('activity-heatmap')).toHaveTextContent(JSON.stringify([]));
+    expect(screen.getByTestId('treasury-flow-sankey')).toHaveTextContent(JSON.stringify([]));
   });
 });

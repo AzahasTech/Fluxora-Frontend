@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, Link, useSearchParams } from "react-router-dom";
 import { getStreamById } from "../lib/api/streamsService";
 import type { StreamRecord } from "../data/streamRecords";
+import { formatAssetAmount } from "../lib/formatters";
 import Breadcrumb from "../components/navigation/Breadcrumb";
 import { Skeleton } from "../components/Skeleton";
 import StreamTimeline from "../components/StreamTimeline";
@@ -283,19 +284,19 @@ export default function StreamDetail() {
           { label: "Status", value: stream.status },
           {
             label: "Deposit",
-            value: `${stream.depositAmount.toLocaleString()} ${stream.asset}`,
+            value: formatAssetAmount(stream.depositAmount, stream.asset),
           },
           {
             label: "Streamed",
-            value: `${stream.streamedAmount.toLocaleString()} ${stream.asset}`,
+            value: formatAssetAmount(stream.streamedAmount, stream.asset),
           },
           {
             label: "Withdrawable",
-            value: `${stream.withdrawableAmount.toLocaleString()} ${stream.asset}`,
+            value: formatAssetAmount(stream.withdrawableAmount, stream.asset),
           },
           {
             label: "Remaining",
-            value: `${stream.remainingAmount.toLocaleString()} ${stream.asset}`,
+            value: formatAssetAmount(stream.remainingAmount, stream.asset),
           },
           { label: "Progress", value: `${stream.progress.toFixed(1)}%` },
         ].map(({ label, value }) => (

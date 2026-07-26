@@ -16,6 +16,12 @@ import { CANONICAL_HEADERS } from './types';
 
 export const MAX_CSV_ROWS = 500;
 
+/**
+ * Max upload size checked in CsvDropZone before `file.text()`.
+ * Sized generously for {@link MAX_CSV_ROWS} short rows (~20× a typical 500-row export).
+ */
+export const MAX_CSV_FILE_SIZE_BYTES = 1_048_576; // 1 MiB
+
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
 /**
@@ -123,6 +129,8 @@ export function validateRow(row: Omit<CsvRow, 'id' | 'rowNumber' | 'status' | 'f
   const deposit = parseFloat(row.depositAmount);
   if (!row.depositAmount.trim() || isNaN(deposit) || deposit <= 0) {
     errors.deposit_amount = 'Deposit must be a positive number';
+  } else if (deposit > MAX_DEPOSIT_AMOUNT) {
+    errors.deposit_amount = `Deposit may not exceed ${MAX_DEPOSIT_AMOUNT.toLocaleString()} USDC`;
   } else {
     // Max 7 decimal places
     const parts = row.depositAmount.split('.');

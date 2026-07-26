@@ -6,14 +6,21 @@ import ZeroAccrualBanner from "../components/ZeroAccrualBanner";
 import { useWallet } from "../components/wallet-connect/Walletcontext";
 import { useToast } from "../components/toast/ToastProvider";
 import { useRecipientStreams } from "../components/treasuryOverviewPage/useTreasury";
+import { formatAssetAmount } from "../lib/formatters";
 import type { StreamRecord } from "../data/streamRecords";
 import { withdraw } from "../lib/stellar/tx";
 import { getStreamStatusNotificationContent } from "../components/ToastNotification";
 import { TransactionReceiptPreview } from "../components/receipt/TransactionReceiptPreview";
 import type { ReceiptData } from "../utils/receiptGenerator";
 import { X, CheckCircle2 } from "lucide-react";
+import RecipientMonthlySummary from "../components/recipient/RecipientMonthlySummary";
 import "./Streams.css";
 import "./Recipient.css";
+import { TRANSACTION_RESET_DELAY_MS } from "../lib/transactionConfig";
+import { useModalAccessibility } from "../components/useModalAccessibility";
+import { Shield, Fingerprint, Lock, Unlock, Key, CheckCircle2, XCircle, AlertCircle, X, Loader2 } from "lucide-react";
+
+// (Removed top-level timeoutRef and useEffect; will be added inside component)
 
 // Demo balances used as a UI fallback when the service returns no recipient
 // streams (no live backend yet, or no seeded match for the connected address).
@@ -89,7 +96,7 @@ export function getRecipientPageTitle(
 ): string {
   if (isTabFocused || count <= 0) return RECIPIENT_PAGE_TITLE;
 
-  const displayCount = count >= 9 ? "9+" : count.toString();
+  const displayCount = count > 9 ? "9+" : count.toString();
   return `(${displayCount}) ${RECIPIENT_PAGE_TITLE}`;
 }
 
@@ -122,6 +129,69 @@ export default function Recipient() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const recipientStreams = useRecipientStreams(wallet.address);
+
+  // ── Local Security Gate States ──
+  const [isBiometricSupported, setIsBiometricSupported] = useState(false);
+  const [isBiometricEnrolled, setIsBiometricEnrolled] = useState(() => {
+    return localStorage.getItem("fluxora_biometric_enrolled") === "true";
+  });
+  const [backupPin, setBackupPin] = useState(() => {
+    return localStorage.getItem("fluxora_backup_pin");
+  });
+  const [isSecurityGateEnabled, setIsSecurityGateEnabled] = useState(() => {
+    return localStorage.getItem("fluxora_security_gate_enabled") === "true";
+  });
+
+  // Enrollment Modal States
+  const [isEnrollmentModalOpen, setIsEnrollmentModalOpen] = useState(false);
+  const [enrollmentStep, setEnrollmentStep] = useState('check-support');
+  const [pinValue, setPinValue] = useState("");
+  const [confirmPinValue, setConfirmPinValue] = useState("");
+  const [enrollmentError, setEnrollmentError] = useState(null);
+
+  // Verification Modal States
+  const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
+  const [verifyState, setVerifyState] = useState('prompt-active');
+  const [verifyPinValue, setVerifyPinValue] = useState("");
+  const [verifyActionType, setVerifyActionType] = useState('withdraw');
+  const [verifyError, setVerifyError] = useState(null);
+
+  // Refs for modal accessibility
+  const enrollmentModalRef = useRef(null);
+  const verifyModalRef = useRef(null);
+
+  // Connect accessibility focus trap/scroll lock hooks
+  useModalAccessibility({
+    isOpen: isEnrollmentModalOpen,
+    onClose: () => setIsEnrollmentModalOpen(false),
+    modalRef: enrollmentModalRef,
+  });
+
+  useModalAccessibility({
+    isOpen: isVerifyModalOpen,
+    onClose: () => {
+      setIsVerifyModalOpen(false);
+      if (txState === "signing") setTxState("idle");
+    },
+    modalRef: verifyModalRef,
+  });
+
+  // Detect biometric capabilities
+  useEffect(() => {
+    const checkSupport = async () => {
+      if (typeof window !== "undefined" && window.PublicKeyCredential) {
+        try {
+          const isAvailable = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+          setIsBiometricSupported(isAvailable);
+        } catch {
+          setIsBiometricSupported(false);
+        }
+      } else {
+        setIsBiometricSupported(false);
+      }
+    };
+    checkSupport();
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => setLoading(false), 2000);
@@ -267,11 +337,200 @@ export default function Recipient() {
     isPending ||
     !selectedWithdrawStream;
 
+  const handleToggleSecurityGate = () => {
+    if (isSecurityGateEnabled) {
+      setVerifyActionType("disable_gate");
+      setVerifyState(isBiometricEnrolled && isBiometricSupported ? "prompt-active" : "unsupported-device-fallback");
+      setVerifyPinValue("");
+      setVerifyError(null);
+      setIsVerifyModalOpen(true);
+    } else {
+      setIsEnrollmentModalOpen(true);
+      setEnrollmentStep(isBiometricSupported ? "check-support" : "set-pin");
+      setPinValue("");
+      setConfirmPinValue("");
+      setEnrollmentError(null);
+    }
+  };
+
+  const handleUpdatePIN = () => {
+    setIsEnrollmentModalOpen(true);
+    setEnrollmentStep("set-pin");
+    setPinValue("");
+    setConfirmPinValue("");
+    setEnrollmentError(null);
+  };
+
+  const triggerBiometricEnrollment = async () => {
+    setEnrollmentError(null);
+    try {
+      if (typeof window !== "undefined" && window.PublicKeyCredential && navigator.credentials?.create) {
+        const challenge = new Uint8Array(32);
+        window.crypto.getRandomValues(challenge);
+        const options = {
+          publicKey: {
+            challenge,
+            rp: { name: "Fluxora" },
+            user: {
+              id: new Uint8Array([1, 2, 3, 4]),
+              name: "recipient@fluxora.xyz",
+              displayName: "Recipient"
+            },
+            pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+            authenticatorSelection: {
+              authenticatorAttachment: "platform",
+              userVerification: "required"
+            },
+            timeout: 60000
+          }
+        };
+        await navigator.credentials.create(options);
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+      localStorage.setItem("fluxora_biometric_enrolled", "true");
+      setIsBiometricEnrolled(true);
+      setEnrollmentStep("set-pin");
+    } catch (err) {
+      setEnrollmentError(err.message || "Failed to register biometrics.");
+    }
+  };
+
+  const triggerBiometricVerification = async () => {
+    setVerifyState("prompt-active");
+    setVerifyError(null);
+    try {
+      if (typeof window !== "undefined" && window.PublicKeyCredential && navigator.credentials?.get) {
+        const challenge = new Uint8Array(32);
+        window.crypto.getRandomValues(challenge);
+        const options = {
+          publicKey: {
+            challenge,
+            timeout: 60000,
+            userVerification: "required"
+          }
+        };
+        await navigator.credentials.get(options);
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+      handleVerificationSuccess();
+    } catch (err) {
+      if (err.name === "NotAllowedError" || err.name === "AbortError") {
+        setVerifyState("prompt-cancelled");
+      } else {
+        setVerifyState("prompt-failed");
+        setVerifyError(err.message || "Biometric verification failed.");
+      }
+    }
+  };
+
+  const handleVerificationSuccess = () => {
+    setVerifyState("prompt-succeeded");
+    setTimeout(() => {
+      setIsVerifyModalOpen(false);
+      if (verifyActionType === "withdraw") {
+        executeOnChainWithdraw();
+      } else {
+        localStorage.removeItem("fluxora_security_gate_enabled");
+        setIsSecurityGateEnabled(false);
+        addToast("Local security gate disabled.", "success");
+      }
+    }, 1000);
+  };
+
+  useEffect(() => {
+    if (isVerifyModalOpen && verifyState === "prompt-active") {
+      triggerBiometricVerification();
+    }
+  }, [isVerifyModalOpen, verifyState]);
+
+  const handleEnrollPinKeyPress = (key) => {
+    setEnrollmentError(null);
+    const activePin = enrollmentStep === "set-pin" ? pinValue : confirmPinValue;
+    const setActivePin = enrollmentStep === "set-pin" ? setPinValue : setConfirmPinValue;
+
+    if (key === "backspace") {
+      setActivePin(activePin.slice(0, -1));
+      return;
+    }
+
+    if (key === "clear") {
+      setActivePin("");
+      return;
+    }
+
+    if (activePin.length < 4) {
+      const nextPin = activePin + key;
+      setActivePin(nextPin);
+
+      if (nextPin.length === 4) {
+        if (enrollmentStep === "set-pin") {
+          setTimeout(() => {
+            setEnrollmentStep("confirm-pin");
+          }, 300);
+        } else {
+          if (nextPin === pinValue) {
+            localStorage.setItem("fluxora_backup_pin", pinValue);
+            localStorage.setItem("fluxora_security_gate_enabled", "true");
+            setBackupPin(pinValue);
+            setIsSecurityGateEnabled(true);
+            setTimeout(() => {
+              setEnrollmentStep("success");
+            }, 300);
+          } else {
+            setEnrollmentError("PINs do not match. Please try again.");
+            setConfirmPinValue("");
+          }
+        }
+      }
+    }
+  };
+
+  const handleVerifyPinKeyPress = (key) => {
+    setVerifyError(null);
+    if (key === "backspace") {
+      setVerifyPinValue(verifyPinValue.slice(0, -1));
+      return;
+    }
+
+    if (key === "clear") {
+      setVerifyPinValue("");
+      return;
+    }
+
+    if (verifyPinValue.length < 4) {
+      const nextPin = verifyPinValue + key;
+      setVerifyPinValue(nextPin);
+
+      if (nextPin.length === 4) {
+        if (nextPin === backupPin) {
+          handleVerificationSuccess();
+        } else {
+          setVerifyError("Incorrect PIN. Please try again.");
+          setVerifyPinValue("");
+        }
+      }
+    }
+  };
+
   const handleWithdraw = async () => {
     if (disabled) return;
-    setTxState("signing");
     setErrorMsg(null);
 
+    if (isSecurityGateEnabled) {
+      setVerifyActionType("withdraw");
+      setVerifyState(isBiometricEnrolled && isBiometricSupported ? "prompt-active" : "unsupported-device-fallback");
+      setVerifyPinValue("");
+      setVerifyError(null);
+      setIsVerifyModalOpen(true);
+    } else {
+      executeOnChainWithdraw();
+    }
+  };
+
+  const executeOnChainWithdraw = async () => {
+    setTxState("signing");
     const recipientAddr = wallet.address!;
     const amountStr = getWithdrawAmount(balance);
     const streamId = selectedWithdrawStream?.id;
@@ -295,7 +554,7 @@ export default function Recipient() {
         type: "Withdrawal",
         sender: "Treasury Smart Contract",
         recipient: recipientAddr,
-        amount: `${balance.toLocaleString()} USDC`,
+        amount: formatAssetAmount(balance, "USDC"),
         timestamp: new Date().toISOString(),
         txHash: typeof txRes === "string" ? txRes : null,
         status: typeof txRes === "string" ? "confirmed" : "pending",
@@ -305,7 +564,7 @@ export default function Recipient() {
       setShowReceiptModal(true);
       addToast("Withdrawal completed successfully on-chain!", "success");
       timerRef.current = setTimeout(() => setTxState("idle"), 5000);
-    } catch (err: any) {
+    } catch (err) {
       setTxState("error");
       setErrorMsg(err.message || "Withdrawal failed.");
       addToast(`Withdrawal failed: ${err.message || err}`, "error");
@@ -323,7 +582,7 @@ export default function Recipient() {
       case "error":
         return "Withdrawal Failed - Retry";
       default:
-        return `Withdraw ${balance.toLocaleString()} USDC`;
+        return `Withdraw ${formatAssetAmount(balance, "USDC")}`;
     }
   };
 
@@ -404,22 +663,25 @@ export default function Recipient() {
         </div>
         <div className="streams-summary-card">
           <span>Total Accrued</span>
-          <strong>{totalAccrued.toLocaleString()} USDC</strong>
+          <strong>{formatAssetAmount(totalAccrued, "USDC")}</strong>
           <p>Total amount earned over the lifetime of all streams.</p>
         </div>
         <div className="streams-summary-card">
           <span>Withdrawn</span>
-          <strong>{totalWithdrawn.toLocaleString()} USDC</strong>
+          <strong>{formatAssetAmount(totalWithdrawn, "USDC")}</strong>
           <p>Total funds already transferred to your wallet.</p>
         </div>
         <div className="streams-summary-card">
           <span>Withdrawable now</span>
           <strong style={{ color: "var(--accent)" }}>
-            {balance.toLocaleString()} USDC
+            {formatAssetAmount(balance, "USDC")}
           </strong>
           <p>Available for immediate withdrawal.</p>
         </div>
       </section>
+
+      {/* ── Printable Monthly Summary ── */}
+      {hasLiveStreams && <RecipientMonthlySummary streams={liveStreams} />}
 
       <section className="recipient-alerts-panel" aria-labelledby="stream-alerts-title">
         <div>

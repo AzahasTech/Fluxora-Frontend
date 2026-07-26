@@ -223,6 +223,9 @@ export function resolveInitialTheme(): Theme {
   return resolveThemeFromPreference(stored ?? "auto");
 }
 
+let transitionTimeout: number | undefined;
+let pendingVisibilityListener: (() => void) | null = null;
+
 /**
  * Applies a built-in theme or the special `"custom"` marker to `<html>`.
  * This is the **only** place in the app that mutates `data-theme`.
@@ -231,7 +234,45 @@ export function resolveInitialTheme(): Theme {
  */
 export function applyTheme(theme: Theme | "custom"): void {
   if (typeof document === "undefined") return;
-  document.documentElement.setAttribute("data-theme", theme);
+  
+  const root = document.documentElement;
+  if (root.getAttribute("data-theme") === theme) return;
+
+  const isInitial = !root.hasAttribute("data-theme");
+
+  if (!isInitial) {
+    root.classList.add("theme-transitioning");
+  }
+
+  root.setAttribute("data-theme", theme);
+
+  if (isInitial) return;
+
+  const cleanup = () => {
+    root.classList.remove("theme-transitioning");
+  };
+
+  window.clearTimeout(transitionTimeout);
+
+  if (pendingVisibilityListener) {
+    document.removeEventListener("visibilitychange", pendingVisibilityListener);
+    pendingVisibilityListener = null;
+  }
+
+  if (document.hidden) {
+    pendingVisibilityListener = () => {
+      if (!document.hidden) {
+        if (pendingVisibilityListener) {
+          document.removeEventListener("visibilitychange", pendingVisibilityListener);
+          pendingVisibilityListener = null;
+        }
+        transitionTimeout = window.setTimeout(cleanup, 200);
+      }
+    };
+    document.addEventListener("visibilitychange", pendingVisibilityListener);
+  } else {
+    transitionTimeout = window.setTimeout(cleanup, 200);
+  }
 }
 
 /**
