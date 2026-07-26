@@ -60,6 +60,8 @@ export default defineConfig({
         "src/components/presence/PresenceBadge.tsx",
         "src/components/presence/PresenceViewerList.tsx",
         "src/hooks/usePresenceViewers.ts",
+        // CSV upload parser (#972 — deposit_amount upper-bound validation)
+        "src/components/csv-upload/csvParser.ts",
       ],
       exclude: [
         "src/components/**/*.test.tsx",

@@ -16,6 +16,20 @@ import { CANONICAL_HEADERS } from './types';
 
 export const MAX_CSV_ROWS = 500;
 
+/**
+ * Maximum allowed deposit amount per CSV row (USDC).
+ *
+ * Aligned with the single-stream creation cap in CreateStreamModal.tsx:
+ *   MAX_ACCRUAL_RATE (100,000 USDC/day) × MAX_DURATION_DAYS (3,650 days)
+ *   = 365,000,000 USDC
+ *
+ * Any deposit above this ceiling is almost certainly a fat-finger or a
+ * cell-reference error in the uploaded spreadsheet; rejecting it here caps
+ * the blast radius before the value reaches handleBulkSubmit's on-chain
+ * amount calculation.
+ */
+export const MAX_DEPOSIT_AMOUNT = 365_000_000;
+
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
 /**
@@ -123,6 +137,8 @@ export function validateRow(row: Omit<CsvRow, 'id' | 'rowNumber' | 'status' | 'f
   const deposit = parseFloat(row.depositAmount);
   if (!row.depositAmount.trim() || isNaN(deposit) || deposit <= 0) {
     errors.deposit_amount = 'Deposit must be a positive number';
+  } else if (deposit > MAX_DEPOSIT_AMOUNT) {
+    errors.deposit_amount = `Deposit may not exceed ${MAX_DEPOSIT_AMOUNT.toLocaleString()} USDC`;
   } else {
     // Max 7 decimal places
     const parts = row.depositAmount.split('.');
