@@ -53,7 +53,7 @@ const healthColor: Record<string, string> = {
 };
 
 /** Fields shown in the aligned comparison grid and their display labels. */
-const COMPARE_FIELDS: Array<{
+export const COMPARE_FIELDS: Array<{
   key: keyof StreamRecord;
   label: string;
   format?: (v: StreamRecord) => string;
@@ -95,14 +95,14 @@ const COMPARE_FIELDS: Array<{
   { key: "health", label: "Health" },
 ];
 
-function fieldValue(r: StreamRecord, field: (typeof COMPARE_FIELDS)[number]): string {
+export function fieldValue(r: StreamRecord, field: (typeof COMPARE_FIELDS)[number]): string {
   if (field.format) return field.format(r);
   const raw = r[field.key];
   return raw === undefined || raw === null ? "—" : String(raw);
 }
 
 /** Returns the number of fields that differ between two records. */
-function countDiffs(a: StreamRecord, b: StreamRecord): number {
+export function countDiffs(a: StreamRecord, b: StreamRecord): number {
   return COMPARE_FIELDS.filter(
     (f) => fieldValue(a, f) !== fieldValue(b, f),
   ).length;
@@ -110,7 +110,7 @@ function countDiffs(a: StreamRecord, b: StreamRecord): number {
 
 // ── Hook: fetch a single pane ─────────────────────────────────────────────────
 
-function usePaneStream(streamId: string): PaneState {
+export function usePaneStream(streamId: string): PaneState {
   const [state, setState] = useState<PaneState>({
     streamId,
     stream: undefined,
