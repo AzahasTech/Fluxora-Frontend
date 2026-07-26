@@ -11,7 +11,6 @@ import {
   ColorBlindToggle,
 } from "../components/colorBlindSimulation";
 import { useWallet } from "../components/wallet-connect/Walletcontext";
-import { useMemo } from "react"; // wait, let's keep all existing structure untouched as much as possible, let's check existing imports.
 
 /**
  * TreasuryPage renders the treasury overview.
