@@ -17,6 +17,7 @@ import RecipientMonthlySummary from "../components/recipient/RecipientMonthlySum
 import "./Streams.css";
 import "./Recipient.css";
 import { TRANSACTION_RESET_DELAY_MS } from "../lib/transactionConfig";
+import { useFaviconBadge } from "../utils/faviconBadge";
 import { useModalAccessibility } from "../components/useModalAccessibility";
 import { Shield, Fingerprint, Lock, Unlock, Key, CheckCircle2, XCircle, AlertCircle, X, Loader2 } from "lucide-react";
 
@@ -286,6 +287,8 @@ export default function Recipient() {
       isTabFocused,
     );
   }, [isTabFocused, pendingWithdrawalCount]);
+
+  useFaviconBadge(pendingWithdrawalCount);
 
   const setStoredAlertsEnabled = (enabled: boolean) => {
     setAlertsEnabled(enabled);

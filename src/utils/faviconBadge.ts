@@ -298,7 +298,8 @@ export function useFaviconBadge(
   count: number,
   options?: Partial<FaviconBadgeOptions>
 ): void {
+  const { size, badgeBgColor, textColor, borderColor, iconColor } = options ?? {};
   useEffect(() => {
-    updateFaviconBadge(count, options);
-  }, [count, options]);
+    updateFaviconBadge(count, { size, badgeBgColor, textColor, borderColor, iconColor });
+  }, [count, size, badgeBgColor, textColor, borderColor, iconColor]);
 }
