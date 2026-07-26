@@ -167,6 +167,8 @@ export default function MetricCard({
         padding: "var(--space-xl)",
         height: "100%",
         position: "relative",
+        minWidth: 0,
+        overflow: "hidden",
         ...style,
       }}
       /*
@@ -422,14 +424,25 @@ export default function MetricCard({
 
       <div
         className="font-medium text-sm leading-5 mb-2"
-        style={{ color: "var(--color-text-primary)", pointerEvents: "none" }}
+        style={{
+          color: "var(--color-text-primary)",
+          pointerEvents: "none",
+          overflow: "hidden",
+          minWidth: 0,
+        }}
       >
         {label}
       </div>
 
       <div
         className="text-2xl font-semibold leading-8 mb-2 flex flex-col gap-1"
-        style={{ color: "var(--color-text-vivid)", pointerEvents: "none" }}
+        style={{
+          color: "var(--color-text-vivid)",
+          pointerEvents: "none",
+          overflow: "hidden",
+          wordBreak: "break-word",
+          minWidth: 0,
+        }}
       >
         {tokens && tokens.length > 0 ? (
           tokens.map((t, i) => (

@@ -295,7 +295,14 @@ export function formatTokenAmount(
     // Determine the locale decimal separator
     const decimalSep = getDecimalSeparator();
 
-    displayStr = `${wholeFormatted}${decimalSep}${fracStr}`;
+    // When raw is negative but its magnitude is smaller than the divisor,
+    // BigInt truncating division yields wholePart = 0n, so Intl.NumberFormat
+    // renders "0" with no minus sign — silently losing the negative sign.
+    // Fix: detect the sign from the original raw value and prepend "-" when
+    // the whole part is zero but the original amount is negative.
+    const negativePrefix = raw < 0n && wholePart === 0n ? "-" : "";
+
+    displayStr = `${negativePrefix}${wholeFormatted}${decimalSep}${fracStr}`;
   }
 
   return `${displayStr}${asset ? ` ${asset}` : ""}${suffix}`;

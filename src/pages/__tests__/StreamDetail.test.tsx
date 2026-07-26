@@ -192,6 +192,28 @@ describe("StreamDetail Page", () => {
     resolveStream(mockStream);
   });
 
+  it("renders large stream amounts via formatAssetAmount instead of bare toLocaleString", async () => {
+    const largeMock = {
+      ...mockStream,
+      depositAmount: Number.MAX_SAFE_INTEGER,
+      streamedAmount: Number.MAX_SAFE_INTEGER,
+      withdrawableAmount: Number.MAX_SAFE_INTEGER,
+      remainingAmount: Number.MAX_SAFE_INTEGER,
+    };
+    vi.spyOn(streamsService, "getStreamById").mockResolvedValue(largeMock);
+
+    renderWithHelmet(
+      <MemoryRouter initialEntries={["/app/streams/STR-123"]}>
+        <Routes>
+          <Route path="/app/streams/:streamId" element={<StreamDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const ddElements = await screen.findAllByText(/9,007,199,254,740,991 USDC/);
+    expect(ddElements.length).toBe(4);
+  });
+
   it("returns null when stream resolves to undefined and loading is false", async () => {
     vi.spyOn(streamsService, "getStreamById").mockResolvedValue(
       undefined as unknown as StreamRecord,

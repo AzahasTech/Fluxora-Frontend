@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 import './CsvDropZone.css';
 import type { UploadZoneState } from './types';
-import { parseAndValidateCsv, buildTemplateCsv } from './csvParser';
+import { parseAndValidateCsv, buildTemplateCsv, MAX_CSV_FILE_SIZE_BYTES } from './csvParser';
 import type { ParseResult } from './types';
 import { ValidationMessage } from '../ValidationMessage';
 
@@ -11,6 +11,9 @@ export interface CsvDropZoneProps {
 }
 
 const ACCEPTED_MIME = new Set(['text/csv', 'application/csv', 'application/vnd.ms-excel', 'text/plain']);
+
+/** Human-readable ceiling for size-reject copy (matches MAX_CSV_FILE_SIZE_BYTES). */
+const MAX_CSV_FILE_SIZE_LABEL = '1 MB';
 
 /**
  * CsvDropZone — drag-and-drop / click-to-browse CSV upload zone.
@@ -40,6 +43,15 @@ export const CsvDropZone: React.FC<CsvDropZoneProps> = ({ onParsed }) => {
       if (!isCsv) {
         setZoneState('parse-error');
         setParseError('Only .csv files are accepted.');
+        return;
+      }
+
+      // Reject oversized files before buffering the entire contents into memory.
+      if (file.size > MAX_CSV_FILE_SIZE_BYTES) {
+        setZoneState('parse-error');
+        setParseError(
+          `File is too large. Maximum size is ${MAX_CSV_FILE_SIZE_LABEL}.`,
+        );
         return;
       }
 
@@ -238,7 +250,7 @@ export const CsvDropZone: React.FC<CsvDropZoneProps> = ({ onParsed }) => {
 
         {zoneState !== 'parsing' && zoneState !== 'dragging-over' && (
           <span className="csv-drop-zone__hint">
-            Accepts .csv · max 500 rows
+            Accepts .csv · max 500 rows · 1 MB
           </span>
         )}
 
@@ -249,7 +261,7 @@ export const CsvDropZone: React.FC<CsvDropZoneProps> = ({ onParsed }) => {
           type="file"
           accept=".csv,text/csv"
           className="sr-only"
-          aria-label="Upload CSV file. Accepts .csv format, maximum 500 rows."
+          aria-label="Upload CSV file. Accepts .csv format, maximum 500 rows, 1 MB."
           aria-describedby="csv-upload-status"
           onChange={onFileChange}
         />

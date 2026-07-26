@@ -249,4 +249,22 @@ describe('EmbedWidgetLayouts', () => {
       expect(compact).toHaveClass('embed-widget-compact');
     });
   });
+
+  describe('formatted values use shared formatters', () => {
+    it('renders large safe integer amounts without precision loss', () => {
+      const largeStream = {
+        ...mockStream,
+        monthlyRate: Number.MAX_SAFE_INTEGER,
+        streamedAmount: Number.MAX_SAFE_INTEGER,
+        remainingAmount: Number.MAX_SAFE_INTEGER,
+      };
+      const { rerender } = render(
+        <EmbedWidgetLayoutCard {...commonProps} stream={largeStream} />
+      );
+
+      expect(screen.getByText(/9,007,199,254,740,991/)).toBeInTheDocument();
+      rerender(<EmbedWidgetLayoutBanner {...commonProps} stream={largeStream} />);
+      expect(screen.getByText(/9,007,199,254,740,991/)).toBeInTheDocument();
+    });
+  });
 });

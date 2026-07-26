@@ -46,14 +46,23 @@ function setClipboard(writeText?: ReturnType<typeof vi.fn>) {
   });
 }
 
+function setShare(share?: ReturnType<typeof vi.fn>) {
+  Object.defineProperty(navigator, "share", {
+    configurable: true,
+    value: share,
+  });
+}
+
 describe("StreamCreatedModal copy button", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setShare(undefined);
   });
 
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+    setShare(undefined);
   });
 
   it("sets copied state only after clipboard write resolves and resets after 2000ms", async () => {
@@ -79,6 +88,26 @@ describe("StreamCreatedModal copy button", () => {
     });
 
     expect(copyBtn).not.toHaveClass("copied");
+  });
+
+  it("uses the Web Share API when available for stream links", async () => {
+    const share = vi.fn().mockResolvedValue(undefined);
+    setShare(share);
+    setClipboard(undefined);
+
+    render(<StreamCreatedModal {...defaultProps} />);
+    const shareBtn = screen.getByRole("button", { name: /share stream url/i });
+
+    fireEvent.click(shareBtn);
+
+    await waitFor(() =>
+      expect(share).toHaveBeenCalledWith({
+        title: "Stream created",
+        text: "View my Stellar stream and withdraw funds.",
+        url: STREAM_URL,
+      }),
+    );
+    expect(screen.getByText("Stream URL shared")).toBeInTheDocument();
   });
 
   it("announces failure when clipboard write rejects and does not show copied state", async () => {
@@ -191,6 +220,6 @@ describe("StreamCreatedModal copy button", () => {
     setClipboard(undefined);
     render(<StreamCreatedModal {...defaultProps} />);
 
-    expect(screen.getByText(STREAM_URL)).toBeInTheDocument();
+    expect(screen.getAllByText(STREAM_URL).length).toBeGreaterThan(0);
   });
 });

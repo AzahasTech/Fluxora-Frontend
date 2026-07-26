@@ -98,6 +98,7 @@ const ColumnMappingStep: React.FC<ColumnMappingStepProps> = ({
         aria-labelledby="column-mapping-heading"
         className="column-mapping-group"
       >
+        <h3 id="column-mapping-heading" className="sr-only">Map your CSV columns</h3>
         <div className="column-mapping-table-header">
           <span className="column-mapping-col-label">Required field</span>
           <span className="column-mapping-col-select">Your CSV column</span>
