@@ -12,6 +12,7 @@ import { getStreamStatusNotificationContent } from "../components/ToastNotificat
 import { TransactionReceiptPreview } from "../components/receipt/TransactionReceiptPreview";
 import type { ReceiptData } from "../utils/receiptGenerator";
 import { X, CheckCircle2 } from "lucide-react";
+import RecipientMonthlySummary from "../components/recipient/RecipientMonthlySummary";
 import "./Streams.css";
 import "./Recipient.css";
 
@@ -420,6 +421,9 @@ export default function Recipient() {
           <p>Available for immediate withdrawal.</p>
         </div>
       </section>
+
+      {/* ── Printable Monthly Summary ── */}
+      {hasLiveStreams && <RecipientMonthlySummary streams={liveStreams} />}
 
       <section className="recipient-alerts-panel" aria-labelledby="stream-alerts-title">
         <div>

@@ -1,5 +1,7 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { computeMonthlySummary } from "../utils/monthlySummary";
+import type { StreamRecord } from "../data/streamRecords";
 import Recipient, {
   getWithdrawAmount,
   isValidWithdrawStreamId,
@@ -12,14 +14,36 @@ const walletState = vi.hoisted(() => ({
   network: null as string | null,
 }));
 
+function makeMockStream(overrides: Partial<StreamRecord>): StreamRecord {
+  return {
+    id: "STR-000",
+    name: "Mock Stream",
+    recipientName: "Mock Recipient",
+    recipientAddress: "GAJCGNCFKZTXRCM2VO6M3XXPAAISEM2EKVTHPCEZVK54ZXPO74ICCA3P",
+    treasuryName: "Mock Treasury",
+    treasuryAddress: "GAJSINKGK5UHTCU3VS645X7QAEJCGNCFKZTXRCM2VO6M3XXPAAISFPVT",
+    asset: "USDC",
+    status: "Active",
+    monthlyRate: 5000,
+    depositAmount: 60000,
+    streamedAmount: 25000,
+    withdrawableAmount: 8000,
+    remainingAmount: 35000,
+    progress: 42,
+    startDate: "2026-01-01",
+    endDate: "2026-12-31",
+    summary: "Mock stream for testing",
+    health: "Healthy",
+    healthNote: "",
+    auditNote: "",
+    tags: [],
+    timeline: [],
+    ...overrides,
+  };
+}
+
 const recipientStreamsState = vi.hoisted(() => ({
-  streams: [] as Array<{
-    id: string;
-    status: "Active" | "Paused" | "Completed";
-    withdrawableAmount: number;
-    streamedAmount: number;
-    isPinned?: boolean;
-  }>,
+  streams: [] as StreamRecord[],
 }));
 
 const withdrawMock = vi.hoisted(() => vi.fn());
@@ -112,12 +136,11 @@ describe("Recipient wallet source", () => {
       "GATDOSCZNJ5YZHNOX7IOD4QDCQSTMR2YNF5IXHFNX3H6B4ICCMSDLOWN";
     walletState.network = "TESTNET";
     recipientStreamsState.streams = [
-      {
+      makeMockStream({
         id: "2",
-        status: "Active",
         withdrawableAmount: 4200,
         streamedAmount: 5000,
-      },
+      }),
     ];
 
     renderRecipient();
@@ -141,18 +164,16 @@ describe("Recipient wallet source", () => {
       "GATDOSCZNJ5YZHNOX7IOD4QDCQSTMR2YNF5IXHFNX3H6B4ICCMSDLOWN";
     walletState.network = "TESTNET";
     recipientStreamsState.streams = [
-      {
+      makeMockStream({
         id: "1",
-        status: "Active",
         withdrawableAmount: 4200,
         streamedAmount: 5000,
-      },
-      {
+      }),
+      makeMockStream({
         id: "2",
-        status: "Active",
         withdrawableAmount: 2800,
         streamedAmount: 5000,
-      },
+      }),
     ];
 
     renderRecipient();
@@ -189,5 +210,138 @@ describe("Recipient wallet source", () => {
     expect(getWithdrawAmount(22_600)).toBe("226000000000");
     expect(getWithdrawAmount(0)).toBeNull();
     expect(getWithdrawAmount(Number.NaN)).toBeNull();
+  });
+});
+
+describe("Recipient monthly summary", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    walletState.connected = true;
+    walletState.address =
+      "GATDOSCZNJ5YZHNOX7IOD4QDCQSTMR2YNF5IXHFNX3H6B4ICCMSDLOWN";
+    walletState.network = "TESTNET";
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("renders the monthly summary section when streams exist", () => {
+    recipientStreamsState.streams = [
+      makeMockStream({ id: "STR-001" }),
+    ];
+
+    renderRecipient();
+
+    expect(
+      screen.getByRole("toolbar", { name: /select summary month/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /print monthly summary/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not render the monthly summary when there are no live streams", () => {
+    recipientStreamsState.streams = [];
+
+    renderRecipient();
+
+    expect(
+      screen.queryByRole("toolbar", { name: /select summary month/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("disables the print button when there is no activity for the month", () => {
+    const pastYear = new Date().getFullYear() - 1;
+    recipientStreamsState.streams = [
+      makeMockStream({
+        id: "STR-001",
+        startDate: `${pastYear}-01-01`,
+        endDate: `${pastYear}-06-30`,
+      }),
+    ];
+
+    renderRecipient();
+
+    const printBtn = screen.getByRole("button", { name: /print monthly summary/i });
+    expect(printBtn).toBeDisabled();
+  });
+
+  it("renders the current month label by default", () => {
+    const now = new Date();
+    const monthName = now.toLocaleString("en-US", { month: "long" });
+    recipientStreamsState.streams = [
+      makeMockStream({ id: "STR-001" }),
+    ];
+
+    renderRecipient();
+
+    const toolbar = screen.getByRole("toolbar", { name: /select summary month/i });
+    expect(within(toolbar).getByText(new RegExp(monthName, "i"))).toBeInTheDocument();
+  });
+
+  it("renders previous and next month navigation buttons", () => {
+    recipientStreamsState.streams = [
+      makeMockStream({ id: "STR-001" }),
+    ];
+
+    renderRecipient();
+
+    expect(
+      screen.getByRole("button", { name: /previous month/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /next month/i }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("computeMonthlySummary utility", () => {
+  it("correctly aggregates totals for a month with activity", () => {
+    const result = computeMonthlySummary(
+      [
+        makeMockStream({
+          id: "STR-001",
+          monthlyRate: 5000,
+          startDate: "2026-01-01",
+          endDate: "2026-12-31",
+          withdrawableAmount: 3000,
+        }),
+        makeMockStream({
+          id: "STR-002",
+          monthlyRate: 3000,
+          startDate: "2026-01-01",
+          endDate: "2026-12-31",
+          withdrawableAmount: 2000,
+        }),
+      ],
+      2026,
+      6,
+    );
+
+    expect(result.hasActivity).toBe(true);
+    expect(result.totalStreamed).toBe(8000);
+    expect(result.withdrawableNow).toBe(5000);
+  });
+
+  it("returns no activity for a month with no streams", () => {
+    const result = computeMonthlySummary([], 2026, 6);
+    expect(result.hasActivity).toBe(false);
+  });
+
+  it("reads withdrawals from timeline events", () => {
+    const result = computeMonthlySummary(
+      [
+        makeMockStream({
+          timeline: [
+            { date: "2026-06-15", title: "Recipient withdrew 4,200 USDC", detail: "" },
+          ],
+        }),
+      ],
+      2026,
+      6,
+    );
+
+    expect(result.totalWithdrawn).toBe(4200);
   });
 });
