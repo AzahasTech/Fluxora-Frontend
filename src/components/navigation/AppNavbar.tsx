@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X, Search, Command, Type } from "lucide-react";
+import { Menu, X, Type, Search, Command } from "lucide-react";
 import { useWallet } from "../wallet-connect/Walletcontext";
 import { useTheme } from "../../theme/ThemeProvider";
 import NavLink from "./NavLink";
@@ -443,7 +443,7 @@ const location = useLocation();
           {/* Easy-read font toggle */}
           <button
             onClick={toggleEasyReadFont}
-            aria-label="Toggle easy-read font"
+            aria-label={`Switch to ${!easyReadFont ? "easy-read dyslexia-friendly" : "default"} font`}
             aria-pressed={easyReadFont}
             title={easyReadFont ? "Disable easy-read font" : "Enable easy-read font"}
             className={`flex items-center justify-center min-h-[44px] min-w-[44px] px-2 rounded-full border transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${
@@ -530,7 +530,7 @@ const location = useLocation();
 
             <button
               onClick={toggleEasyReadFont}
-              aria-label="Toggle easy-read font"
+              aria-label={`Switch to ${!easyReadFont ? "easy-read dyslexia-friendly" : "default"} font`}
               aria-pressed={easyReadFont}
               title={easyReadFont ? "Disable easy-read font" : "Enable easy-read font"}
               className={`flex items-center justify-center min-h-[44px] min-w-[44px] px-2 rounded-full border transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${

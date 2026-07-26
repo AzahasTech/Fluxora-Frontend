@@ -1,5 +1,5 @@
 ﻿import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, within, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PreviewValidateStep from '../PreviewValidateStep';
 import type { CsvRow } from '../types';
@@ -59,7 +59,7 @@ describe('PreviewValidateStep', () => {
     });
 
     it('shows an error badge when there are needs-fix rows, hidden otherwise', () => {
-      const { rerender: _rerender } = renderStep([makeRow({ status: 'needs-fix', rowNumber: 1 })]);
+      renderStep([makeRow({ status: 'needs-fix', rowNumber: 1 })]);
       expect(screen.getByText('1 needs attention')).toBeInTheDocument();
     });
 

@@ -667,6 +667,12 @@ export default function CreateStreamModal({
     if (recipientError || depositError || rateError || durationError || depositTooLarge || customDateError || cliffError) {
       return false;
     }
+
+    if (contrastState === 'AA-fail-blocked') {
+      setError("Please select a high-contrast label color or check 'Use anyway' to proceed.");
+      return false;
+    }
+
     return true;
   };
 
@@ -1521,10 +1527,10 @@ export default function CreateStreamModal({
                         </div>
                       </div>
                     )}
-                  </div>
-                </>
-              );
-            })()}
+                      </div>
+                    </>
+                  );
+                })()}
             <div className="info-box" role="region" aria-labelledby="info-box-title">
               <div id="info-box-title" className="info-box-title">{t("createStream.step1.infoBoxTitle")}</div>
               <p className="info-box-text">

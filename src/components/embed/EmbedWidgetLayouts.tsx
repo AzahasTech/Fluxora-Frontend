@@ -1,4 +1,3 @@
-import React from "react";
 import StreamTimeline from "../StreamTimeline";
 import { StreamRecord, StreamStatus } from "../../data/streamRecords";
 import { ThemeConfig } from "../../lib/embedThemeParser";
