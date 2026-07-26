@@ -10,6 +10,7 @@ import {
   type StreamRecord,
   type StreamStatus,
 } from "../../data/streamRecords";
+import { formatAssetAmount } from "../formatters";
 
 const DEFAULT_BASE_URL = "http://localhost:8787";
 
@@ -244,9 +245,7 @@ function metricIcon(src: string, alt: string) {
 }
 
 function formatUsdc(amount: number): string {
-  return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(
-    amount,
-  )} USDC`;
+  return formatAssetAmount(amount, "USDC");
 }
 
 function deriveMockMetrics(records: StreamRecord[]): Metric[] {
