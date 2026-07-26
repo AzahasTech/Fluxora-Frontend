@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { AlertCircle, Check, Copy } from "lucide-react";
+import { AlertCircle, Check, Copy, Share2 } from "lucide-react";
 import { useClipboard } from "../../hooks/useClipboard";
 import { useOptionalToast } from "../toast/ToastProvider";
 import TruncatedReveal from "./TruncatedReveal";
@@ -15,8 +15,8 @@ interface TruncatedAddressProps {
 }
 
 /** Map the shared hook status to this component's public CopyState. */
-function toCopyState(status: "idle" | "copied" | "failed"): CopyState {
-  return status === "failed" ? "error" : status;
+function toCopyState(status: "idle" | "copied" | "shared" | "cancelled" | "failed"): CopyState {
+  return status === "failed" ? "error" : status === "copied" || status === "shared" ? "copied" : "idle";
 }
 
 /**
@@ -40,9 +40,10 @@ export default function TruncatedAddress({
   onCopy,
   onCopyStateChange,
 }: TruncatedAddressProps) {
-  const { copy, status } = useClipboard();
+  const { copy, share, status, support } = useClipboard();
   const toast = useOptionalToast();
   const copyState = toCopyState(status);
+  const shareSupported = support.share;
 
   // Stellar address truncation: first 6 characters + "..." + last 4 characters
   const truncated =
@@ -55,8 +56,24 @@ export default function TruncatedAddress({
     onCopyStateChange?.(copyState);
   }, [copyState, onCopyStateChange]);
 
-  const handleCopy = async (e: React.MouseEvent | React.KeyboardEvent) => {
+  const handleAction = async (e: React.MouseEvent | React.KeyboardEvent) => {
     e.stopPropagation();
+
+    if (shareSupported) {
+      const outcome = await share({
+        title: "Stellar address",
+        text: `Stellar address: ${address}`,
+      });
+
+      if (outcome === "shared") {
+        return;
+      }
+
+      if (outcome === "cancelled") {
+        return;
+      }
+    }
+
     const didCopy = await copy(address);
     if (didCopy) {
       onCopy?.(address);
@@ -66,11 +83,15 @@ export default function TruncatedAddress({
   };
 
   const stateMessage =
-    copyState === "copied"
-      ? "Address copied"
-      : copyState === "error"
-        ? "Address could not be copied"
-        : "";
+    status === "shared"
+      ? "Address shared"
+      : status === "cancelled"
+        ? "Share cancelled"
+        : copyState === "copied"
+          ? "Address copied"
+          : copyState === "error"
+            ? "Address could not be copied"
+            : "";
 
   return (
     <div
@@ -87,16 +108,16 @@ export default function TruncatedAddress({
       )}
       <div
         className="flex items-center gap-1.5 group cursor-pointer"
-        onClick={handleCopy}
+        onClick={handleAction}
         role="button"
         tabIndex={0}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            void handleCopy(e);
+            void handleAction(e);
           }
         }}
-        aria-label={`${copyState === "copied" ? "Copied" : "Copy"} ${label || "address"}: ${address}`}
+        aria-label={`${status === "shared" ? "Shared" : status === "copied" ? "Copied" : shareSupported ? "Share" : "Copy"} ${label || "address"}: ${address}`}
       >
         {/*
          * TruncatedReveal: full address always in accessibility tree (sr-only span)
@@ -135,6 +156,12 @@ export default function TruncatedAddress({
             <Check size={14} aria-hidden="true" />
           ) : copyState === "error" ? (
             <AlertCircle size={14} aria-hidden="true" />
+          ) : shareSupported ? (
+            <Share2
+              size={14}
+              aria-hidden="true"
+              className="group-hover:text-primary transition-colors opacity-70"
+            />
           ) : (
             <Copy
               size={14}

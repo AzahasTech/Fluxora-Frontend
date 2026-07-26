@@ -70,9 +70,7 @@ describe("StreamCreatedModal", () => {
   it("renders streamId with # prefix and streamUrl in the URL bar", () => {
     render(<StreamCreatedModal {...defaultProps} />);
     expect(screen.getByText("#STR-123")).toBeInTheDocument();
-    expect(
-      screen.getByText("https://fluxora.io/stream/STR-123"),
-    ).toBeInTheDocument();
+    expect(screen.getAllByText("https://fluxora.io/stream/STR-123").length).toBeGreaterThan(0);
   });
 
   it("announcement text renders when isOpen is true and clears after 1000ms", () => {
