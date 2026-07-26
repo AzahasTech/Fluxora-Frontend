@@ -1,12 +1,3 @@
-# PR Title: design: spec form-progress stepper header for create-stream modal
-
-## PR Link
-[Create Pull Request for design/create-stream-progress-stepper](https://github.com/Michvista/Fluxora-Frontend/pull/new/design/create-stream-progress-stepper)
-
-## Branch
-`design/create-stream-progress-stepper`
-
----
 
 ## Summary
 This PR delivers an explicit, always-visible form-progress stepper header in `CreateStreamModal.tsx` replacing the legacy step comments and basic indicators. It supports backward navigation, responsive layouts (compact mobile progress-bar variant), and fully adheres to WCAG 2.1 AA accessibility guidelines.
