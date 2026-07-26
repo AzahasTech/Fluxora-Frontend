@@ -191,4 +191,40 @@ describe('CreateStreamModal - Live Contrast-Check UX', () => {
     const overrideRatio = getContrastRatio('#92400e', '#fef3c7');
     expect(overrideRatio).toBeGreaterThanOrEqual(4.5);
   });
+
+  test('10. Advanced Mode: validation blocks low contrast color unless override checked', () => {
+    render(<CreateStreamModal {...defaultProps} />);
+
+    // Toggle Advanced mode
+    const advancedBtn = screen.getByRole('radio', { name: /createStream.modeToggle.advancedAria/i });
+    fireEvent.click(advancedBtn);
+
+    // Fill valid recipient and deposit
+    const recipientInput = screen.getByLabelText(/Recipient Address/i);
+    const depositInput = screen.getByLabelText(/Deposit Amount/i);
+
+    fireEvent.change(recipientInput, { target: { value: 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB' } });
+    fireEvent.change(depositInput, { target: { value: '100' } });
+
+    // Select low contrast swatch
+    const whiteSwatch = screen.getByRole('radio', { name: /White \(#ffffff\)/i });
+    fireEvent.click(whiteSwatch);
+
+    // Try to submit/create
+    const submitBtn = screen.getByRole('button', { name: /createStream.button.create/i });
+    fireEvent.click(submitBtn);
+
+    // Validation should fail and show warning error message
+    expect(screen.getByText(/Please select a high-contrast label color or check 'Use anyway' to proceed/i)).toBeInTheDocument();
+
+    // Now toggle override checkbox
+    const overrideCheckbox = screen.getByLabelText(/Use low-contrast color anyway/i);
+    fireEvent.click(overrideCheckbox);
+
+    // Try to submit/create again
+    fireEvent.click(submitBtn);
+
+    // It should proceed
+    expect(screen.queryByText(/Please select a high-contrast label color or check 'Use anyway' to proceed/i)).not.toBeInTheDocument();
+  });
 });
