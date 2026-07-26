@@ -17,6 +17,8 @@ interface UseEmbedAccessibilityOptions {
   description?: string;
   /** Whether this is the main content of the page */
   isMainContent?: boolean;
+  /** Active locale (e.g., "en", "es") — used for the html lang attribute. */
+  locale?: string;
 }
 
 /**
@@ -25,7 +27,8 @@ interface UseEmbedAccessibilityOptions {
 export function useEmbedAccessibility({
   title,
   description,
-  isMainContent = true
+  isMainContent = true,
+  locale = "en",
 }: UseEmbedAccessibilityOptions) {
   useEffect(() => {
     // Set page title
@@ -46,10 +49,10 @@ export function useEmbedAccessibility({
       metaDescription.setAttribute('content', description);
     }
     
-    // Set lang attribute for screen readers
+    // Set lang attribute for screen readers, derived from the active locale.
     const html = document.documentElement;
     const originalLang = html.getAttribute('lang') || 'en';
-    html.setAttribute('lang', 'en');
+    html.setAttribute('lang', locale);
     
     // Announce widget load to screen readers using a per-instance announcer
     const cleanupAnnouncer = announceToScreenReader(`Widget loaded: ${title}`);
@@ -85,7 +88,7 @@ export function useEmbedAccessibility({
 
       cleanupAnnouncer();
     };
-  }, [title, description, isMainContent]);
+  }, [title, description, isMainContent, locale]);
 }
 
 /**
