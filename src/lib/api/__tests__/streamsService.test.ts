@@ -376,6 +376,21 @@ describe("streamsService mock mode", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("formats USDC metrics with the browser locale (non-US)", async () => {
+    vi.stubGlobal("navigator", { language: "de-DE" });
+
+    const metrics = await getTreasuryMetrics();
+
+    const totalStreaming = metrics.find((m) => m.label === "Total Streaming")!;
+    expect(totalStreaming.value).toMatch(/^[\d,.]+ USDC$/);
+    // German locale uses period as thousands separator (e.g. "81.600 USDC")
+    expect(totalStreaming.value).toContain(".");
+    expect(totalStreaming.value).not.toContain(",");
+
+    const withdrawable = metrics.find((m) => m.label === "Withdrawable")!;
+    expect(withdrawable.value).toMatch(/^[\d,.]+ USDC$/);
+  });
+
   it("filters seeded streams by recipient and treasury filters", async () => {
     const seed = streamRecords[0]!;
     const filteredByRecipient = await getStreams({ recipient: seed.recipientAddress });
