@@ -92,17 +92,28 @@ export const VoiceProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, []);
 
-  // Match phrase to command dictionary
+  // Match phrase to command dictionary.
+  // Partial-match (substring) fallback is only applied to non-destructive
+  // commands so that longer utterances that happen to contain the phrase
+  // "Cancel stream" do not accidentally trigger the destructive confirmation
+  // flow (Issue #938).
   const matchCommand = useCallback((spokenText: string): VoiceCommandDef | null => {
     const clean = spokenText.trim().toLowerCase();
     if (!clean) return null;
 
+    // Exact-match pass — check every command's phrase and aliases first.
     for (const cmd of DEFAULT_COMMANDS) {
       if (cmd.phrase.toLowerCase() === clean) return cmd;
       if (cmd.aliases.some((alias) => alias.toLowerCase() === clean)) return cmd;
-      // Partial match support
-      if (clean.includes(cmd.phrase.toLowerCase())) return cmd;
     }
+
+    // Partial-match pass — only for non-destructive commands.
+    for (const cmd of DEFAULT_COMMANDS) {
+      if (cmd.requiresConfirmation) continue;
+      if (clean.includes(cmd.phrase.toLowerCase())) return cmd;
+      if (cmd.aliases.some((alias) => clean.includes(alias.toLowerCase()))) return cmd;
+    }
+
     return null;
   }, []);
 
