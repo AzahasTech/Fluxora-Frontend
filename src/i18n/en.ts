@@ -7,6 +7,22 @@ export const en = {
   "createStream.description": "Set the recipient, funding, and schedule details for a new Stellar stream.",
   "createStream.accessibility.closeLabel": "Close create stream modal",
 
+  // CreateStreamModal Mode Toggle
+  "createStream.modeToggle.wizardLabel": "Wizard",
+  "createStream.modeToggle.advancedLabel": "Advanced",
+  "createStream.modeToggle.ariaLabel": "Create stream mode: {mode}",
+  "createStream.modeToggle.wizardAria": "Guided 3-step wizard (default)",
+  "createStream.modeToggle.advancedAria": "Single-page advanced form with all fields",
+
+  // CreateStreamModal Advanced mode (single-page)
+  "createStream.advanced.section1Header": "Recipient & amount",
+  "createStream.advanced.section1Desc": "Set who receives the stream and how much USDC to lock.",
+  "createStream.advanced.section2Header": "Rate & schedule",
+  "createStream.advanced.section2Desc": "Configure how fast USDC streams, when it starts, and optional cliff.",
+  "createStream.advanced.section3Header": "Summary & create",
+  "createStream.advanced.section3Desc": "Review your stream details and submit to the network.",
+  "createStream.advanced.createBtn": "Create stream",
+
   // CreateStreamModal Steps
   "createStream.steps.recipientAmount": "Recipient & amount",
   "createStream.steps.rateSchedule": "Rate & schedule",

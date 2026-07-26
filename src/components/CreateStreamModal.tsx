@@ -194,6 +194,7 @@ export default function CreateStreamModal({
 
   // ── Flow mode ─────────────────────────────────────────────────────────────
   const [flowMode, setFlowMode] = useState<FlowMode>('choose');
+  const [wizardMode, setWizardMode] = useState(true);
 
   // ── Bulk CSV state ────────────────────────────────────────────────────────
   const [bulkStep, setBulkStep] = useState<BulkStep>('upload');
@@ -643,8 +644,63 @@ export default function CreateStreamModal({
     return true;
   };
 
+  /** Combined validation for Advanced mode: runs all field validators at once. */
+  const validateAllFields = (): boolean => {
+    setTouched(prev => ({
+      ...prev,
+      recipient: true,
+      depositAmount: true,
+      accrualRate: true,
+      duration: true,
+      ...(startTimeOption === 'custom' ? { customStartDate: true } : {}),
+      ...(cliffEnabled ? { cliffDate: true } : {}),
+    }));
+
+    const recipientError = !recipient.trim() || (wallet.connected && wallet.address && recipient.trim().toLowerCase() === wallet.address.toLowerCase()) || !isValidStellarAddress(recipient.trim());
+    const depositError = !depositAmount.trim() || isNaN(parseFloat(depositAmount.replace(/,/g, ''))) || parseFloat(depositAmount.replace(/,/g, '')) <= 0;
+    const rateError = Boolean(validateAccrualRate(accrualRate, t));
+    const durationError = Boolean(validateDuration(duration, t));
+    const depositTooLarge = !Number.isFinite(requiredDepositValue) || requiredDepositValue > MAX_REQUIRED_DEPOSIT || parseFloat(requiredDeposit) > userDeposit;
+    const customDateError = startTimeOption === 'custom' && (!customStartDate || isDateTimeInPast(customStartDate));
+    const cliffError = cliffEnabled && (!cliffDate || isDateTimeInPast(cliffDate) || (startTimeOption === 'custom' && customStartDate && isBeforeLocalDateTime(cliffDate, customStartDate)));
+
+    if (recipientError || depositError || rateError || durationError || depositTooLarge || customDateError || cliffError) {
+      return false;
+    }
+    return true;
+  };
+
   const handleNext = async () => {
     if (isBusyCreating) return;
+
+    // Advanced mode: validate all fields at once, then submit directly
+    if (!wizardMode) {
+      setError(null);
+      if (!validateAllFields()) return;
+      if (!wallet.connected) {
+        setError(t("createStream.validation.walletNotConnected"));
+        return;
+      }
+      if (wallet.isNetworkMismatch) {
+        setError(t("createStream.validation.networkMismatch", {
+          expected: wallet.expectedNetwork,
+          actual: wallet.network?.toUpperCase() || "",
+        }));
+        return;
+      }
+      setStreamError(null);
+      resetTransactionState();
+      const payload = buildSubmissionPayload();
+      if (!isOnline) {
+        const entry = enqueueAction(payload);
+        pendingSubmissionRef.current = payload;
+        setQueuedSubmission({ id: entry.id, position: getQueuePosition(entry.id) });
+        setQueueLength(getQueueLength());
+        return;
+      }
+      await submitPayload(payload);
+      return;
+    }
 
     if (currentStep === 1) {
       setTouched(prev => ({ ...prev, recipient: true, depositAmount: true }));
@@ -876,9 +932,39 @@ export default function CreateStreamModal({
                     : bulkStep === 'mapping'
                       ? "We couldn't auto-detect all required columns. Map each required field to a column in your file."
                       : `Reviewing ${bulkRows.length} stream${bulkRows.length !== 1 ? 's' : ''}`)
-                : t("createStream.description")}
+                : flowMode === 'single' && !wizardMode
+                  ? 'All fields in a single view — configure recipient, rate, schedule, and cliff.'
+                  : t("createStream.description")}
             </p>
           </div>
+          {flowMode === 'single' && (
+            <div
+              className="mode-toggle"
+              role="radiogroup"
+              aria-label={t("createStream.modeToggle.ariaLabel", { mode: wizardMode ? 'wizard' : 'advanced' })}
+            >
+              <button
+                type="button"
+                role="radio"
+                aria-checked={wizardMode}
+                aria-label={t("createStream.modeToggle.wizardAria")}
+                className={`mode-toggle__btn ${wizardMode ? 'mode-toggle__btn--active' : ''}`}
+                onClick={() => setWizardMode(true)}
+              >
+                {t("createStream.modeToggle.wizardLabel")}
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={!wizardMode}
+                aria-label={t("createStream.modeToggle.advancedAria")}
+                className={`mode-toggle__btn ${!wizardMode ? 'mode-toggle__btn--active' : ''}`}
+                onClick={() => setWizardMode(false)}
+              >
+                {t("createStream.modeToggle.advancedLabel")}
+              </button>
+            </div>
+          )}
           <button
             type="button"
             className="close-button"
@@ -1063,7 +1149,7 @@ export default function CreateStreamModal({
         {/* ── Mode: single (existing 3-step flow) ──────────────────────── */}
         {flowMode === 'single' && (
           <>
-        {(() => {
+        {wizardMode && (() => {
           const stepLabels = STEPPER_LABEL_KEYS.map((key) => t(key));
           const currentLabel = stepLabels[currentStep - 1];
           const trackFillPercent =
@@ -2132,11 +2218,710 @@ export default function CreateStreamModal({
                 </>
               );
             })()}
+
+          {!wizardMode && (
+            <div className="advanced-form">
+              {/* ── Section 1: Recipient & Amount ─────────────────────── */}
+              <section className="advanced-section" aria-labelledby="advanced-section-1-title">
+                <hr className="advanced-section__divider" />
+                <div className="advanced-section__header">
+                  <h3 id="advanced-section-1-title" className="advanced-section__title">
+                    {t("createStream.advanced.section1Header")}
+                  </h3>
+                  <p className="advanced-section__desc">
+                    {t("createStream.advanced.section1Desc")}
+                  </p>
+                </div>
+                <div className="advanced-section__body">
+                  {(() => {
+                    const recipientError = touched.recipient
+                      ? (!recipient.trim()
+                          ? t("createStream.validation.recipientRequired")
+                          : (wallet.connected && wallet.address && recipient.trim().toLowerCase() === wallet.address.toLowerCase())
+                          ? 'Recipient cannot be the same as the connected wallet address.'
+                          : !isValidStellarAddress(recipient.trim())
+                          ? t("createStream.validation.recipientInvalid")
+                          : undefined)
+                      : undefined;
+                    const recipientSuccess = touched.recipient && !recipientError && recipient.trim().length > 0;
+                    const depositAmountNum = parseFloat(depositAmount.replace(/,/g, ''));
+                    const depositError = touched.depositAmount
+                      ? (!depositAmount.trim() || isNaN(depositAmountNum) || depositAmountNum <= 0
+                          ? t("createStream.validation.depositPositive")
+                          : undefined)
+                      : undefined;
+                    const depositSuccess = touched.depositAmount && !depositError && depositAmount.trim().length > 0;
+
+                    return (
+                      <>
+                        <InputField
+                          id="create-stream-recipient"
+                          label={t("createStream.step1.recipientLabel")}
+                          required
+                          error={recipientError}
+                          helperText={t("createStream.step1.recipientHelper")}
+                          success={recipientSuccess}
+                        >
+                          <input
+                            ref={recipientInputRef}
+                            type="text"
+                            className="input-field"
+                            value={recipient}
+                            onChange={(e) => {
+                              setRecipient(e.target.value);
+                              if (error) setError(null);
+                            }}
+                            onBlur={() => handleBlur('recipient')}
+                            placeholder={t("createStream.step1.recipientPlaceholder")}
+                            autoComplete="off"
+                          />
+                        </InputField>
+
+                        <InputField
+                          id="create-stream-deposit"
+                          label={t("createStream.step1.depositLabel")}
+                          required
+                          error={depositError}
+                          helperText={t("createStream.step1.depositHelper")}
+                          success={depositSuccess}
+                        >
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            className="input-field"
+                            value={depositAmount}
+                            onChange={(e) => {
+                              const v = sanitizeDepositAmountInput(e.target.value);
+                              setDepositAmount(v);
+                              if (error) setError(null);
+                            }}
+                            onBlur={() => handleBlur('depositAmount')}
+                            placeholder={t("createStream.step1.depositPlaceholder")}
+                          />
+                        </InputField>
+
+                        <div className="label-color-section" role="region" aria-labelledby="advanced-label-color-heading">
+                          <div className="label-color-header">
+                            <label id="advanced-label-color-heading" className="label-color-title">
+                              Stream Label Color <span style={{ color: 'var(--muted)', fontWeight: 'normal' }}>(Optional)</span>
+                            </label>
+                            <div className="swatch-theme-toggle" role="group" aria-label="Contrast background theme preview">
+                              <span>Against:</span>
+                              <button
+                                type="button"
+                                className={targetTheme === 'light' ? 'active' : ''}
+                                onClick={() => setTargetTheme('light')}
+                                aria-pressed={targetTheme === 'light'}
+                              >
+                                Light (#FFF)
+                              </button>
+                              <button
+                                type="button"
+                                className={targetTheme === 'dark' ? 'active' : ''}
+                                onClick={() => setTargetTheme('dark')}
+                                aria-pressed={targetTheme === 'dark'}
+                              >
+                                Dark (#0A0E17)
+                              </button>
+                            </div>
+                          </div>
+
+                          <div
+                            className="swatch-grid"
+                            role="radiogroup"
+                            aria-label="Stream label color swatches"
+                          >
+                            {LABEL_COLOR_SWATCHES.map((swatch, idx) => {
+                              const isSelected = labelColor.toLowerCase() === swatch.hex.toLowerCase();
+                              const isFocused = focusedSwatchIndex === idx;
+                              const isLightSwatch = ['#ffffff', '#fef08a', '#94a3b8'].includes(swatch.hex.toLowerCase());
+
+                              return (
+                                <button
+                                  key={swatch.hex}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={isSelected}
+                                  aria-label={`${swatch.label} (${swatch.hex})`}
+                                  tabIndex={isFocused || (focusedSwatchIndex === 0 && idx === 0) ? 0 : -1}
+                                  className={`swatch-btn ${isSelected ? 'selected' : ''} ${isLightSwatch ? 'swatch-btn--light' : ''}`}
+                                  style={{ backgroundColor: swatch.hex }}
+                                  onClick={() => {
+                                    setLabelColor(swatch.hex);
+                                    setCustomHexInput(swatch.hex);
+                                    setFocusedSwatchIndex(idx);
+                                    setOverrideContrast(false);
+                                    if (error) setError(null);
+                                  }}
+                                  onKeyDown={(e) => handleSwatchKeyDown(e, idx)}
+                                >
+                                  {isSelected && (
+                                    <svg
+                                      className="swatch-btn-checkmark"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="3.5"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      aria-hidden="true"
+                                    >
+                                      <polyline points="20 6 9 17 4 12" />
+                                    </svg>
+                                  )}
+                                </button>
+                              );
+                            })}
+
+                            {labelColor && (
+                              <button
+                                type="button"
+                                className="swatch-clear-btn"
+                                onClick={() => {
+                                  setLabelColor('');
+                                  setCustomHexInput('');
+                                  setOverrideContrast(false);
+                                  if (error) setError(null);
+                                }}
+                                aria-label="Clear label color selection"
+                              >
+                                Clear
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="swatch-custom-input-row">
+                            <label htmlFor="advanced-custom-label-hex" style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>
+                              Custom Hex:
+                            </label>
+                            <input
+                              id="advanced-custom-label-hex"
+                              type="text"
+                              className="swatch-custom-input"
+                              placeholder="#3B82F6"
+                              maxLength={7}
+                              value={customHexInput}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setCustomHexInput(val);
+                                if (error) setError(null);
+                                if (/^#?[0-9A-Fa-f]{6}$/.test(val)) {
+                                  const formatted = val.startsWith('#') ? val : `#${val}`;
+                                  setLabelColor(formatted);
+                                  setOverrideContrast(false);
+                                }
+                              }}
+                            />
+                          </div>
+
+                          <div
+                            className="contrast-badge-container"
+                            aria-live="polite"
+                            aria-atomic="true"
+                            id="advanced-label-color-contrast-status"
+                          >
+                            {contrastState === 'no-selection' && (
+                              <span className="contrast-badge contrast-badge--none">
+                                No color selected
+                              </span>
+                            )}
+                            {contrastState === 'AA-pass' && (
+                              <span className="contrast-badge contrast-badge--pass">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                                {contrastEval.formattedRatio} — Pass AA
+                              </span>
+                            )}
+                            {contrastState === 'AA-fail-blocked' && (
+                              <span className="contrast-badge contrast-badge--fail">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                  <line x1="12" y1="9" x2="12" y2="13" />
+                                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                                </svg>
+                                {contrastEval.formattedRatio} — Fail AA
+                              </span>
+                            )}
+                            {contrastState === 'AA-fail-overridden' && (
+                              <span className="contrast-badge contrast-badge--overridden">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                  <line x1="12" y1="9" x2="12" y2="13" />
+                                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                                </svg>
+                                {contrastEval.formattedRatio} — Fail AA (Overridden)
+                              </span>
+                            )}
+                          </div>
+
+                          {(contrastState === 'AA-fail-blocked' || contrastState === 'AA-fail-overridden') && (
+                            <div
+                              className="contrast-warning-box"
+                              role={contrastState === 'AA-fail-blocked' ? 'alert' : 'region'}
+                              aria-live={contrastState === 'AA-fail-blocked' ? 'assertive' : 'polite'}
+                            >
+                              <div className="contrast-warning-text">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                  <line x1="12" y1="9" x2="12" y2="13" />
+                                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                                </svg>
+                                <span>
+                                  Low contrast label color ({contrastEval.formattedRatio}). May be unreadable against the surface.
+                                </span>
+                              </div>
+                              <div className="contrast-override-row">
+                                <input
+                                  type="checkbox"
+                                  id="advanced-override-contrast-checkbox"
+                                  className="contrast-override-checkbox"
+                                  checked={overrideContrast}
+                                  onChange={(e) => {
+                                    setOverrideContrast(e.target.checked);
+                                    if (error) setError(null);
+                                  }}
+                                />
+                                <label htmlFor="advanced-override-contrast-checkbox" className="contrast-override-label">
+                                  Use low-contrast color anyway (not recommended)
+                                </label>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </section>
+
+              {/* ── Section 2: Rate & Schedule ─────────────────────────── */}
+              <section className="advanced-section" aria-labelledby="advanced-section-2-title">
+                <hr className="advanced-section__divider" />
+                <div className="advanced-section__header">
+                  <h3 id="advanced-section-2-title" className="advanced-section__title">
+                    {t("createStream.advanced.section2Header")}
+                  </h3>
+                  <p className="advanced-section__desc">
+                    {t("createStream.advanced.section2Desc")}
+                  </p>
+                </div>
+                <div className="advanced-section__body">
+                  {(() => {
+                    const accrualRateError = touched.accrualRate
+                      ? validateAccrualRate(accrualRate, t)
+                      : undefined;
+                    const accrualRateSuccess = touched.accrualRate && !accrualRateError && accrualRate.trim().length > 0;
+                    const durationError = touched.duration
+                      ? validateDuration(duration, t)
+                      : undefined;
+                    const durationSuccess = touched.duration && !durationError && duration.trim().length > 0;
+                    const customStartDateError = (startTimeOption === 'custom' && touched.customStartDate)
+                      ? (!customStartDate
+                          ? t("createStream.validation.startDateRequired")
+                          : isDateTimeInPast(customStartDate)
+                          ? t("createStream.validation.startDateFuture")
+                          : undefined)
+                      : undefined;
+                    const customStartDateSuccess = startTimeOption === 'custom' && touched.customStartDate && !customStartDateError && Boolean(customStartDate);
+                    const cliffDateError = (cliffEnabled && touched.cliffDate)
+                      ? (!cliffDate
+                          ? t("createStream.validation.cliffDateRequired")
+                          : isDateTimeInPast(cliffDate)
+                          ? t("createStream.validation.cliffDatePast")
+                          : (startTimeOption === 'custom' && customStartDate && isBeforeLocalDateTime(cliffDate, customStartDate))
+                          ? t("createStream.validation.cliffDateAfterStart")
+                          : (() => {
+                              const startMs = startTimeOption === 'custom' && customStartDate
+                                ? new Date(customStartDate).getTime()
+                                : Date.now();
+                              const endDate = computeStreamEndDate(new Date(startMs), parseFloat(duration));
+                              if (endDate) {
+                                const msg = validateCliffBeforeEnd(new Date(cliffDate), endDate);
+                                if (msg) return msg;
+                              }
+                              return undefined;
+                            })())
+                      : undefined;
+                    const cliffDateSuccess = cliffEnabled && touched.cliffDate && !cliffDateError && Boolean(cliffDate);
+
+                    return (
+                      <>
+                        <div className="form-group">
+                          <label htmlFor="advanced-accrual-rate" className="form-label">
+                            {t("createStream.step2.rateLabel")}
+                            {<span className="required" aria-hidden="true"> *</span>}
+                            <InfoTooltip
+                              id="advanced-rate-tooltip"
+                              title={t("createStream.step2.rateTooltipTitle")}
+                              ariaLabel={t("createStream.step2.rateTooltipAria")}
+                              content={
+                                <>
+                                  <p>{t("createStream.step2.rateTooltipBody1")}</p>
+                                  <p style={{ marginTop: '8px', fontWeight: 500 }}>
+                                    {t("createStream.step2.rateTooltipBody2")}
+                                  </p>
+                                </>
+                              }
+                            />
+                          </label>
+                          <div className={`input-container ${accrualRateError ? 'input-container--error' : accrualRateSuccess ? 'input-container--success' : ''}`.trim()}>
+                            <InputWithUnit
+                              id="advanced-accrual-rate"
+                              unit="USDC / day"
+                              type="text"
+                              inputMode="decimal"
+                              value={accrualRate}
+                              onChange={(e) => setAccrualRate(e.target.value)}
+                              onBlur={() => handleBlur('accrualRate')}
+                              placeholder="0.00"
+                              hasError={Boolean(accrualRateError)}
+                              aria-required="true"
+                              aria-describedby={accrualRateError ? 'advanced-accrual-rate-error' : 'advanced-accrual-rate-hint'}
+                            />
+                          </div>
+                          {accrualRateError && (
+                            <span id="advanced-accrual-rate-error" className="validation-message validation-message--error" role="alert">
+                              <svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
+                                <circle cx="6" cy="6" r="5.5" stroke="currentColor" />
+                                <path d="M6 3.5V6.5" stroke="currentColor" strokeLinecap="round" />
+                                <circle cx="6" cy="8.5" r="0.5" fill="currentColor" />
+                              </svg>
+                              {accrualRateError}
+                            </span>
+                          )}
+                          {!accrualRateError && (
+                            <span id="advanced-accrual-rate-hint" className="validation-message validation-message--hint" role="status">
+                              {t("createStream.step2.rateHint")}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="form-group">
+                          <label htmlFor="advanced-duration" className="form-label">
+                            {t("createStream.step2.durationLabel")}
+                            {<span className="required" aria-hidden="true"> *</span>}
+                            <InfoTooltip
+                              id="advanced-duration-tooltip"
+                              title={t("createStream.step2.durationTooltipTitle")}
+                              ariaLabel={t("createStream.step2.durationTooltipAria")}
+                              content={
+                                <>
+                                  <p>{t("createStream.step2.durationTooltipBody1")}</p>
+                                  <p style={{ marginTop: '8px' }}>{t("createStream.step2.durationTooltipBody2")}</p>
+                                </>
+                              }
+                            />
+                          </label>
+                          <div className={`input-container ${durationError ? 'input-container--error' : durationSuccess ? 'input-container--success' : ''}`.trim()}>
+                            <InputWithUnit
+                              id="advanced-duration"
+                              unit="days"
+                              type="text"
+                              inputMode="decimal"
+                              value={duration}
+                              onChange={(e) => setDuration(e.target.value)}
+                              onBlur={() => handleBlur('duration')}
+                              placeholder="1"
+                              hasError={Boolean(durationError)}
+                              aria-required="true"
+                              aria-describedby={durationError ? 'advanced-duration-error' : 'advanced-duration-hint'}
+                            />
+                          </div>
+                          {durationError && (
+                            <span id="advanced-duration-error" className="validation-message validation-message--error" role="alert">
+                              <svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
+                                <circle cx="6" cy="6" r="5.5" stroke="currentColor" />
+                                <path d="M6 3.5V6.5" stroke="currentColor" strokeLinecap="round" />
+                                <circle cx="6" cy="8.5" r="0.5" fill="currentColor" />
+                              </svg>
+                              {durationError}
+                            </span>
+                          )}
+                          {!durationError && (
+                            <span id="advanced-duration-hint" className="validation-message validation-message--hint" role="status">
+                              {t("createStream.step2.durationHint")}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label">{t("createStream.step2.startTimeLabel")}</label>
+                          <div className="segmented-control">
+                            <button
+                              type="button"
+                              className={`segment-btn ${startTimeOption === 'now' ? 'active' : ''}`}
+                              onClick={() => setStartTimeOption('now')}
+                            >
+                              {t("createStream.step2.startNowBtn")}
+                            </button>
+                            <button
+                              type="button"
+                              className={`segment-btn ${startTimeOption === 'custom' ? 'active' : ''}`}
+                              onClick={() => setStartTimeOption('custom')}
+                            >
+                              {t("createStream.step2.customDateBtn")}
+                            </button>
+                          </div>
+                          {startTimeOption === 'custom' && (
+                            <div style={{ marginTop: '0.75rem' }}>
+                              <InputField
+                                id="advanced-custom-start-date"
+                                label={t("createStream.step2.customStartDateLabel")}
+                                required
+                                error={customStartDateError}
+                                helperText={t("createStream.step2.customStartDateHelper")}
+                                success={customStartDateSuccess}
+                              >
+                                <input
+                                  type="datetime-local"
+                                  className="input-field"
+                                  value={customStartDate}
+                                  onChange={(e) => setCustomStartDate(e.target.value)}
+                                  onBlur={() => handleBlur('customStartDate')}
+                                />
+                              </InputField>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label">
+                            {t("createStream.step2.cliffPeriodLabel")}{' '}
+                            <span style={{ color: 'var(--muted)', fontWeight: 'normal' }}>{t("createStream.step2.optionalLabel")}</span>
+                            <InfoTooltip
+                              id="advanced-cliff-tooltip"
+                              title={t("createStream.step2.cliffTooltipTitle")}
+                              ariaLabel={t("createStream.step2.cliffTooltipAria")}
+                              content={
+                                <>
+                                  <p>{t("createStream.step2.cliffTooltipBody1")}</p>
+                                  <ul style={{ marginTop: '4px', marginLeft: '16px', listStyle: 'disc' }}>
+                                    <li>{t("createStream.step2.cliffTooltipList1")}</li>
+                                    <li>{t("createStream.step2.cliffTooltipList2")}</li>
+                                    <li>{t("createStream.step2.cliffTooltipList3")}</li>
+                                  </ul>
+                                  <p style={{ marginTop: '8px' }}>{t("createStream.step2.cliffTooltipBody2")}</p>
+                                  <p style={{ marginTop: '8px' }}>{t("createStream.step2.cliffTooltipBody3")}</p>
+                                </>
+                              }
+                            />
+                          </label>
+                          <div
+                            className="toggle-container"
+                            onClick={() => setCliffEnabled(!cliffEnabled)}
+                            role="switch"
+                            aria-checked={cliffEnabled}
+                            aria-label={t("createStream.step2.enableCliffLabel")}
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                setCliffEnabled(!cliffEnabled);
+                              }
+                            }}
+                          >
+                            <div className={`toggle-switch ${cliffEnabled ? 'on' : ''}`}>
+                              <div className="toggle-knob" />
+                            </div>
+                            <span>{t("createStream.step2.enableCliffLabel")}</span>
+                          </div>
+                          {cliffEnabled && (
+                            <div style={{ marginTop: '0.75rem' }}>
+                              <InputField
+                                id="advanced-cliff-date"
+                                label={t("createStream.step2.cliffDateLabel")}
+                                required
+                                error={cliffDateError}
+                                helperText={t("createStream.step2.cliffDateHelper")}
+                                success={cliffDateSuccess}
+                              >
+                                <input
+                                  type="datetime-local"
+                                  className="input-field"
+                                  value={cliffDate}
+                                  onChange={(e) => setCliffDate(e.target.value)}
+                                  onBlur={() => handleBlur('cliffDate')}
+                                />
+                              </InputField>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="deposit-summary">
+                          <div className="deposit-box">
+                            <div className="deposit-label">{t("createStream.step2.requiredDepositLabel")}</div>
+                            <div className={`deposit-value ${parseFloat(requiredDeposit) > userDeposit ? 'required' : ''}`}>
+                              {requiredDeposit} USDC
+                            </div>
+                          </div>
+                          <div className="deposit-box">
+                            <div className="deposit-label">{t("createStream.step2.yourDepositLabel")}</div>
+                            <div className="deposit-value">{userDeposit.toFixed(2)} USDC</div>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </section>
+
+              {/* ── Section 3: Summary & Create ─────────────────────────── */}
+              <section className="advanced-section" aria-labelledby="advanced-section-3-title">
+                <hr className="advanced-section__divider" />
+                <div className="advanced-section__header">
+                  <h3 id="advanced-section-3-title" className="advanced-section__title">
+                    {t("createStream.advanced.section3Header")}
+                  </h3>
+                  <p className="advanced-section__desc">
+                    {t("createStream.advanced.section3Desc")}
+                  </p>
+                </div>
+                <div className="advanced-section__body">
+                  {(() => {
+                    const reviewRecipient = recipient.trim();
+                    const reviewDeposit = formatReviewDeposit(depositAmount);
+                    const durationUnit = formatDurationUnit(duration, t);
+                    return (
+                      <>
+                        <div className="review-cards">
+                          <div className="review-card review-card-vertical">
+                            <div className="review-card-header">
+                              <span className="review-card-icon" aria-hidden="true">
+                                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                              </span>
+                              <div className="review-card-title">{t("createStream.step3.recipientCardTitle")}</div>
+                            </div>
+                            <div className="review-card-content">
+                              <div className="review-card-sublabel">{t("createStream.step3.addressLabel")}</div>
+                              <div className="review-card-value">{maskAddress(reviewRecipient)}</div>
+                            </div>
+                          </div>
+
+                          <div className="review-card review-card-vertical">
+                            <div className="review-card-header">
+                              <span className="review-card-icon" aria-hidden="true">
+                                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              </span>
+                              <div className="review-card-title">{t("createStream.step3.depositCardTitle")}</div>
+                            </div>
+                            <div className="review-card-content">
+                              <div className="review-card-amount">
+                                {reviewDeposit}{" "}
+                                <span className="review-card-unit">USDC</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="review-card review-card-schedule-card">
+                            <div className="review-card-schedule-header">
+                              <span className="review-card-icon" aria-hidden="true">
+                                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                </svg>
+                              </span>
+                              <div className="review-card-title">{t("createStream.step3.rateScheduleCardTitle")}</div>
+                            </div>
+                            <div className="review-card-rows">
+                              <div className="review-card-row">
+                                <span className="review-card-row-icon" aria-hidden="true">
+                                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                  </svg>
+                                </span>
+                                <span className="review-card-row-label">{t("createStream.step3.rateLabel")}</span>
+                                <span className="review-card-row-value">
+                                  {t("createStream.step3.rateValue", { accrualRate })}
+                                </span>
+                              </div>
+                              <div className="review-card-row">
+                                <span className="review-card-row-icon" aria-hidden="true">
+                                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                </span>
+                                <span className="review-card-row-label">{t("createStream.step3.durationLabel")}</span>
+                                <span className="review-card-row-value">
+                                  {t("createStream.step3.durationValue", { duration, unit: durationUnit })}
+                                </span>
+                              </div>
+                              <div className="review-card-row">
+                                <span className="review-card-row-icon" aria-hidden="true">
+                                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                </span>
+                                <span className="review-card-row-label">{t("createStream.step3.startLabel")}</span>
+                                <span className="review-card-row-value">
+                                  {startTimeOption === "now"
+                                    ? t("createStream.step3.startImmediately")
+                                    : customStartDate
+                                      ? formatLocalDateTime(customStartDate)
+                                      : "—"}
+                                </span>
+                              </div>
+                              <div className="review-card-row">
+                                <span className="review-card-row-icon" aria-hidden="true">
+                                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <circle cx="12" cy="12" r="10" />
+                                    <path strokeLinecap="round" d="M12 6v6" />
+                                  </svg>
+                                </span>
+                                <span className="review-card-row-label">{t("createStream.step3.cliffLabel")}</span>
+                                <span className="review-card-row-value">
+                                  {cliffEnabled && cliffDate
+                                    ? formatLocalDateTime(cliffDate)
+                                    : t("createStream.step3.cliffNotSet")}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div
+                          className="review-warning-box"
+                          role="region"
+                          aria-live="polite"
+                        >
+                          <strong>{t("createStream.step3.warningTitle")}</strong>{" "}
+                          {t("createStream.step3.warningText", { reviewDeposit })}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </section>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
         <div className="modal-footer">
-          {currentStep === 1 ? (
+          {!wizardMode ? (
+            <>
+              <button
+                type="button"
+                className="btn btn-cancel"
+                onClick={handleCancel}
+                disabled={isBusyCreating}
+              >
+                {t("createStream.button.cancel")}
+              </button>
+              <button
+                type="button"
+                className="btn btn-next"
+                onClick={handleNext}
+                disabled={isBusyCreating}
+                aria-busy={isBusyCreating}
+              >
+                {t("createStream.advanced.createBtn")}
+              </button>
+            </>
+          ) : currentStep === 1 ? (
             <>
               <button
                 type="button"
