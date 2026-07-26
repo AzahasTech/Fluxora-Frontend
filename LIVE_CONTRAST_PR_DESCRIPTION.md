@@ -1,7 +1,7 @@
 # PR Title: design: spec live contrast-check UX using contrastUtils
 
 ## PR Link
-[Create Pull Request for design/create-stream-live-contrast-check](https://github.com/Fluxora-Org/Fluxora-Frontend/pull/new/design/create-stream-live-contrast-check)
+[Create Pull Request for design/create-stream-live-contrast-check](https://github.com/Michvista/Fluxora-Frontend/pull/new/design/create-stream-live-contrast-check)
 
 ## Branch
 `design/create-stream-live-contrast-check`
