@@ -175,6 +175,23 @@ describe("Dashboard page accessibility - landmarks and heading hierarchy", () =>
     }
   });
 
+  it("renders large safe integer amounts via formatters instead of bare toLocaleString", async () => {
+    // Override wallet to be connected so withdrawable is non-null and
+    // the announcement uses formatAssetAmount.
+    vi.mocked(treasuryModule.useTreasury).mockReturnValue({
+      metrics: [],
+      streams: [
+        { status: "Active", depositAmount: Number.MAX_SAFE_INTEGER },
+      ] as any,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    await renderLoadedDashboard();
+    // Total Streaming card uses the useMemo-derived value formatted via formatUsdc
+    expect(screen.getByText(/9,007,199,254,740,991/)).toBeInTheDocument();
+  });
+
   it("passes automated accessibility checks for landmark structure", async () => {
     const { container } = await renderLoadedDashboard();
     vi.useRealTimers();

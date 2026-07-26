@@ -21,6 +21,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getStreamById } from "../lib/api/streamsService";
 import type { StreamRecord } from "../data/streamRecords";
+import { formatAssetAmount } from "../lib/formatters";
 import { Skeleton } from "./Skeleton";
 import StreamTimeline from "./StreamTimeline";
 import { useTickingNow } from "../hooks/useTickingNow";
@@ -61,27 +62,27 @@ const COMPARE_FIELDS: Array<{
   {
     key: "monthlyRate",
     label: "Monthly Rate",
-    format: (r) => `${r.monthlyRate.toLocaleString()} ${r.asset}/mo`,
+    format: (r) => formatAssetAmount(r.monthlyRate, r.asset, "/mo"),
   },
   {
     key: "depositAmount",
     label: "Deposit",
-    format: (r) => `${r.depositAmount.toLocaleString()} ${r.asset}`,
+    format: (r) => formatAssetAmount(r.depositAmount, r.asset),
   },
   {
     key: "streamedAmount",
     label: "Streamed",
-    format: (r) => `${r.streamedAmount.toLocaleString()} ${r.asset}`,
+    format: (r) => formatAssetAmount(r.streamedAmount, r.asset),
   },
   {
     key: "withdrawableAmount",
     label: "Withdrawable",
-    format: (r) => `${r.withdrawableAmount.toLocaleString()} ${r.asset}`,
+    format: (r) => formatAssetAmount(r.withdrawableAmount, r.asset),
   },
   {
     key: "remainingAmount",
     label: "Remaining",
-    format: (r) => `${r.remainingAmount.toLocaleString()} ${r.asset}`,
+    format: (r) => formatAssetAmount(r.remainingAmount, r.asset),
   },
   {
     key: "progress",

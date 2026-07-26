@@ -64,6 +64,18 @@ export default function Sidebar({
     };
   }, []);
 
+  // Toggle inert on the sidebar when the mobile drawer is closed so that
+  // focusable descendants are excluded from keyboard tab order.
+  useEffect(() => {
+    if (!sidebarRef.current) return;
+    const shouldBeInert = isMobile && !mobileOpen;
+    if (shouldBeInert) {
+      sidebarRef.current.setAttribute("inert", "");
+    } else {
+      sidebarRef.current.removeAttribute("inert");
+    }
+  }, [isMobile, mobileOpen]);
+
   // Escape key support
   useEffect(() => {
     if (!mobileOpen) return;
@@ -142,7 +154,6 @@ export default function Sidebar({
         )}
         role="navigation"
         aria-label="Primary navigation"
-        aria-hidden={isMobile && !mobileOpen}
       >
         <div className="flex flex-col h-full py-4">
           {/* Header / Logo */}
