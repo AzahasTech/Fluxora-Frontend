@@ -230,17 +230,21 @@ export function announceToScreenReader(
 
 /**
  * Sets focus management for embed widget keyboard navigation
+ * 
+ * Dynamically queries focusable elements on each Tab keypress to support
+ * asynchronously rendered content (e.g., loaded streams, error states).
  */
 export function setupEmbedFocusManagement(
   container: HTMLElement,
   focusableSelector: string = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
 ): () => void {
-  const focusableElements = container.querySelectorAll(focusableSelector);
-  const firstFocusable = focusableElements[0] as HTMLElement;
-  const lastFocusable = focusableElements[focusableElements.length - 1] as HTMLElement;
-  
   const handleKeyDown = (event: KeyboardEvent) => {
     if (event.key === 'Tab') {
+      // Query focusable elements on each Tab press to reflect current DOM state
+      const focusableElements = container.querySelectorAll(focusableSelector);
+      const firstFocusable = focusableElements[0] as HTMLElement;
+      const lastFocusable = focusableElements[focusableElements.length - 1] as HTMLElement;
+      
       if (!event.shiftKey && document.activeElement === lastFocusable) {
         // Tab from last element: cycle to first
         event.preventDefault();
