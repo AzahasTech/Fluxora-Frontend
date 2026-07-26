@@ -54,10 +54,15 @@ export default function Metrics({ metrics, loading, error }: MetricsProps) {
   const [announcement, setAnnouncement] = useState("");
   const [focusTargetId, setFocusTargetId] = useState<string | null>(null);
 
+  // Breakpoints mirror the CSS grid: grid-cols-1 / sm:grid-cols-2 / lg:grid-cols-3
+  const GRID_BREAKPOINT_SM = 640;  // Tailwind `sm`
+  const GRID_BREAKPOINT_LG = 1024; // Tailwind `lg`
+
   // Return column count based on viewport width
   const getGridCols = () => {
-    if (window.innerWidth >= 1024) return 3;
-    return 2;
+    if (window.innerWidth >= GRID_BREAKPOINT_LG) return 3;
+    if (window.innerWidth >= GRID_BREAKPOINT_SM) return 2;
+    return 1;
   };
 
   // Keyboard reorder handler
