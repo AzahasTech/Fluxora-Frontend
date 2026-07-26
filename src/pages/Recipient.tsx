@@ -6,6 +6,7 @@ import ZeroAccrualBanner from "../components/ZeroAccrualBanner";
 import { useWallet } from "../components/wallet-connect/Walletcontext";
 import { useToast } from "../components/toast/ToastProvider";
 import { useRecipientStreams } from "../components/treasuryOverviewPage/useTreasury";
+import { formatAssetAmount } from "../lib/formatters";
 import type { StreamRecord } from "../data/streamRecords";
 import { withdraw } from "../lib/stellar/tx";
 import { getStreamStatusNotificationContent } from "../components/ToastNotification";
@@ -295,7 +296,7 @@ export default function Recipient() {
         type: "Withdrawal",
         sender: "Treasury Smart Contract",
         recipient: recipientAddr,
-        amount: `${balance.toLocaleString()} USDC`,
+        amount: formatAssetAmount(balance, "USDC"),
         timestamp: new Date().toISOString(),
         txHash: typeof txRes === "string" ? txRes : null,
         status: typeof txRes === "string" ? "confirmed" : "pending",
@@ -323,7 +324,7 @@ export default function Recipient() {
       case "error":
         return "Withdrawal Failed - Retry";
       default:
-        return `Withdraw ${balance.toLocaleString()} USDC`;
+        return `Withdraw ${formatAssetAmount(balance, "USDC")}`;
     }
   };
 
@@ -404,18 +405,18 @@ export default function Recipient() {
         </div>
         <div className="streams-summary-card">
           <span>Total Accrued</span>
-          <strong>{totalAccrued.toLocaleString()} USDC</strong>
+          <strong>{formatAssetAmount(totalAccrued, "USDC")}</strong>
           <p>Total amount earned over the lifetime of all streams.</p>
         </div>
         <div className="streams-summary-card">
           <span>Withdrawn</span>
-          <strong>{totalWithdrawn.toLocaleString()} USDC</strong>
+          <strong>{formatAssetAmount(totalWithdrawn, "USDC")}</strong>
           <p>Total funds already transferred to your wallet.</p>
         </div>
         <div className="streams-summary-card">
           <span>Withdrawable now</span>
           <strong style={{ color: "var(--accent)" }}>
-            {balance.toLocaleString()} USDC
+            {formatAssetAmount(balance, "USDC")}
           </strong>
           <p>Available for immediate withdrawal.</p>
         </div>

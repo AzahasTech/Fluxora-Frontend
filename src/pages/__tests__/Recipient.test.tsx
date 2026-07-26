@@ -193,3 +193,36 @@ describe("Recipient page empty state", () => {
   });
 });
 
+describe("Recipient large-amount formatting", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function renderLoadedRecipient() {
+    const view = render(
+      <ToastProvider>
+        <Recipient />
+      </ToastProvider>
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+    });
+
+    return view;
+  }
+
+  it("renders large safe integer balances via formatAssetAmount", async () => {
+    await renderLoadedRecipient();
+
+    // DEMO_BALANCE = 22600, DEMO_TOTAL_ACCRUED = 43250, DEMO_TOTAL_WITHDRAWN = 20650
+    expect(screen.getByText("22,600 USDC")).toBeInTheDocument();
+    expect(screen.getByText("43,250 USDC")).toBeInTheDocument();
+    expect(screen.getByText("20,650 USDC")).toBeInTheDocument();
+  });
+});
+

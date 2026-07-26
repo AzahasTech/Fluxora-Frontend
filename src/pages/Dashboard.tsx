@@ -12,6 +12,7 @@ import { useLiveAnnouncer } from "../hooks/useLiveAnnouncer";
 import { useWallet } from "../components/wallet-connect/Walletcontext";
 import { useTreasury } from "../components/treasuryOverviewPage/useTreasury";
 import { readOnboardingDismissed } from "../lib/onboarding";
+import { formatAssetAmount } from "../lib/formatters";
 import { formatUsdc, toRecentStream } from "../lib/recentStreamMapper";
 import Button from "../components/Button";
 import "../design-tokens.css";
@@ -75,7 +76,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (withdrawable !== null) {
       announce(
-        `Available balance updated to ${withdrawable.toLocaleString()} USDC.`,
+        `Available balance updated to ${formatAssetAmount(withdrawable, "USDC")}.`,
       );
     }
   }, [withdrawable, announce]);
