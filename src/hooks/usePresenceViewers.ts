@@ -21,7 +21,7 @@ export interface Viewer {
  * - `viewerCount`: Number of active viewers (excluding those fading out).
  */
 export function usePresenceViewers(
-  streamId?: string,
+  _streamId?: string,
   __devMockViewers: Viewer[] = []
 ) {
   const [viewers, setViewers] = useState<Viewer[]>(() => __devMockViewers);

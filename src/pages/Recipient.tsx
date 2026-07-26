@@ -16,9 +16,7 @@ import { X, CheckCircle2 } from "lucide-react";
 import RecipientMonthlySummary from "../components/recipient/RecipientMonthlySummary";
 import "./Streams.css";
 import "./Recipient.css";
-import { TRANSACTION_RESET_DELAY_MS } from "../lib/transactionConfig";
 import { useModalAccessibility } from "../components/useModalAccessibility";
-import { Shield, Fingerprint, Lock, Unlock, Key, CheckCircle2, XCircle, AlertCircle, X, Loader2 } from "lucide-react";
 
 // (Removed top-level timeoutRef and useEffect; will be added inside component)
 
@@ -101,7 +99,6 @@ export function getRecipientPageTitle(
 }
 
 export default function Recipient() {
-  const timeoutRef = useRef<number | null>(null);
   const wallet = useWallet();
   const { addToast } = useToast();
 
@@ -147,14 +144,14 @@ export default function Recipient() {
   const [enrollmentStep, setEnrollmentStep] = useState('check-support');
   const [pinValue, setPinValue] = useState("");
   const [confirmPinValue, setConfirmPinValue] = useState("");
-  const [enrollmentError, setEnrollmentError] = useState(null);
+  const [enrollmentError, setEnrollmentError] = useState<string | null>(null);
 
   // Verification Modal States
   const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
   const [verifyState, setVerifyState] = useState('prompt-active');
   const [verifyPinValue, setVerifyPinValue] = useState("");
   const [verifyActionType, setVerifyActionType] = useState('withdraw');
-  const [verifyError, setVerifyError] = useState(null);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
 
   // Refs for modal accessibility
   const enrollmentModalRef = useRef(null);
@@ -337,65 +334,6 @@ export default function Recipient() {
     isPending ||
     !selectedWithdrawStream;
 
-  const handleToggleSecurityGate = () => {
-    if (isSecurityGateEnabled) {
-      setVerifyActionType("disable_gate");
-      setVerifyState(isBiometricEnrolled && isBiometricSupported ? "prompt-active" : "unsupported-device-fallback");
-      setVerifyPinValue("");
-      setVerifyError(null);
-      setIsVerifyModalOpen(true);
-    } else {
-      setIsEnrollmentModalOpen(true);
-      setEnrollmentStep(isBiometricSupported ? "check-support" : "set-pin");
-      setPinValue("");
-      setConfirmPinValue("");
-      setEnrollmentError(null);
-    }
-  };
-
-  const handleUpdatePIN = () => {
-    setIsEnrollmentModalOpen(true);
-    setEnrollmentStep("set-pin");
-    setPinValue("");
-    setConfirmPinValue("");
-    setEnrollmentError(null);
-  };
-
-  const triggerBiometricEnrollment = async () => {
-    setEnrollmentError(null);
-    try {
-      if (typeof window !== "undefined" && window.PublicKeyCredential && navigator.credentials?.create) {
-        const challenge = new Uint8Array(32);
-        window.crypto.getRandomValues(challenge);
-        const options = {
-          publicKey: {
-            challenge,
-            rp: { name: "Fluxora" },
-            user: {
-              id: new Uint8Array([1, 2, 3, 4]),
-              name: "recipient@fluxora.xyz",
-              displayName: "Recipient"
-            },
-            pubKeyCredParams: [{ type: "public-key", alg: -7 }],
-            authenticatorSelection: {
-              authenticatorAttachment: "platform",
-              userVerification: "required"
-            },
-            timeout: 60000
-          }
-        };
-        await navigator.credentials.create(options);
-      } else {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      }
-      localStorage.setItem("fluxora_biometric_enrolled", "true");
-      setIsBiometricEnrolled(true);
-      setEnrollmentStep("set-pin");
-    } catch (err) {
-      setEnrollmentError(err.message || "Failed to register biometrics.");
-    }
-  };
-
   const triggerBiometricVerification = async () => {
     setVerifyState("prompt-active");
     setVerifyError(null);
@@ -407,7 +345,7 @@ export default function Recipient() {
           publicKey: {
             challenge,
             timeout: 60000,
-            userVerification: "required"
+            userVerification: "required" as UserVerificationRequirement
           }
         };
         await navigator.credentials.get(options);
@@ -416,11 +354,12 @@ export default function Recipient() {
       }
       handleVerificationSuccess();
     } catch (err) {
-      if (err.name === "NotAllowedError" || err.name === "AbortError") {
+      const e = err as Error;
+      if (e.name === "NotAllowedError" || e.name === "AbortError") {
         setVerifyState("prompt-cancelled");
       } else {
         setVerifyState("prompt-failed");
-        setVerifyError(err.message || "Biometric verification failed.");
+        setVerifyError(e.message || "Biometric verification failed.");
       }
     }
   };
@@ -444,75 +383,6 @@ export default function Recipient() {
       triggerBiometricVerification();
     }
   }, [isVerifyModalOpen, verifyState]);
-
-  const handleEnrollPinKeyPress = (key) => {
-    setEnrollmentError(null);
-    const activePin = enrollmentStep === "set-pin" ? pinValue : confirmPinValue;
-    const setActivePin = enrollmentStep === "set-pin" ? setPinValue : setConfirmPinValue;
-
-    if (key === "backspace") {
-      setActivePin(activePin.slice(0, -1));
-      return;
-    }
-
-    if (key === "clear") {
-      setActivePin("");
-      return;
-    }
-
-    if (activePin.length < 4) {
-      const nextPin = activePin + key;
-      setActivePin(nextPin);
-
-      if (nextPin.length === 4) {
-        if (enrollmentStep === "set-pin") {
-          setTimeout(() => {
-            setEnrollmentStep("confirm-pin");
-          }, 300);
-        } else {
-          if (nextPin === pinValue) {
-            localStorage.setItem("fluxora_backup_pin", pinValue);
-            localStorage.setItem("fluxora_security_gate_enabled", "true");
-            setBackupPin(pinValue);
-            setIsSecurityGateEnabled(true);
-            setTimeout(() => {
-              setEnrollmentStep("success");
-            }, 300);
-          } else {
-            setEnrollmentError("PINs do not match. Please try again.");
-            setConfirmPinValue("");
-          }
-        }
-      }
-    }
-  };
-
-  const handleVerifyPinKeyPress = (key) => {
-    setVerifyError(null);
-    if (key === "backspace") {
-      setVerifyPinValue(verifyPinValue.slice(0, -1));
-      return;
-    }
-
-    if (key === "clear") {
-      setVerifyPinValue("");
-      return;
-    }
-
-    if (verifyPinValue.length < 4) {
-      const nextPin = verifyPinValue + key;
-      setVerifyPinValue(nextPin);
-
-      if (nextPin.length === 4) {
-        if (nextPin === backupPin) {
-          handleVerificationSuccess();
-        } else {
-          setVerifyError("Incorrect PIN. Please try again.");
-          setVerifyPinValue("");
-        }
-      }
-    }
-  };
 
   const handleWithdraw = async () => {
     if (disabled) return;
@@ -566,8 +436,9 @@ export default function Recipient() {
       timerRef.current = setTimeout(() => setTxState("idle"), 5000);
     } catch (err) {
       setTxState("error");
-      setErrorMsg(err.message || "Withdrawal failed.");
-      addToast(`Withdrawal failed: ${err.message || err}`, "error");
+      const e = err as Error;
+      setErrorMsg(e.message || "Withdrawal failed.");
+      addToast(`Withdrawal failed: ${e.message || err}`, "error");
     }
   };
 
