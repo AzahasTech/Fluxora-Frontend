@@ -3,6 +3,7 @@ import { axe } from "vitest-axe";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ONBOARDING_DISMISSED_STORAGE_KEY } from "../../lib/onboarding";
 import Dashboard from "../Dashboard";
+import * as treasuryModule from "../../components/treasuryOverviewPage/useTreasury";
 
 vi.mock("@stellar/freighter-api", () => ({
   isConnected: vi.fn(async () => ({ isConnected: false })),
@@ -33,6 +34,7 @@ describe("Dashboard page accessibility and announcements", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   async function renderLoadedDashboard() {
@@ -76,6 +78,22 @@ describe("Dashboard page accessibility and announcements", () => {
     expect(
       screen.getByRole("dialog", { name: /choose your wallet/i }),
     ).toBeInTheDocument();
+  });
+
+  it("renders the Total Streaming figure as the sum of active streams depositAmount", async () => {
+    vi.mocked(treasuryModule.useTreasury).mockReturnValue({
+      metrics: [],
+      streams: [
+        { status: "Active", depositAmount: 10000 },
+        { status: "Active", depositAmount: 25000 },
+        { status: "Paused", depositAmount: 5000 },
+      ] as any,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    await renderLoadedDashboard();
+    expect(screen.getByText("35,000.00 USDC")).toBeInTheDocument();
   });
 
   it("uses the shared onboarding dismissal key across onboarding and dashboard rendering", async () => {
