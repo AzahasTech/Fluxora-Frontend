@@ -289,7 +289,7 @@ export default function AppNavbar({
   onSidebarToggle,
   isSidebarOpen = false,
 }: AppNavbarProps) {
-  const { theme, toggleTheme, easyReadFont, toggleEasyReadFont } = useTheme();
+  const { theme, toggleTheme, fontMode, toggleFontMode } = useTheme();
   const {
     connected,
     address,
@@ -446,18 +446,41 @@ const location = useLocation();
                 Connect Wallet
               </Link>
             )}
-          </div>
+          </button>
 
-          {/* Mobile: hamburger (only in Marketing View or if not using sidebar) */}
-          {!isAppView && (
-            <button
-              className="md:hidden flex items-center justify-center w-[44px] h-[44px] rounded-md text-[var(--navbar-icon-color)] hover:text-[var(--text)] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
-              onClick={handleMobileToggle}
-              aria-label={
-                mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"
-              }
-              aria-expanded={mobileMenuOpen}
-              aria-controls="mobile-nav"
+          {/* Easy-read font toggle */}
+          <button
+            onClick={toggleFontMode}
+            aria-label={`Switch to ${fontMode === "default" ? "easy-read dyslexia-friendly" : "default"} font`}
+            aria-pressed={fontMode === "dyslexic"}
+            title={fontMode === "default" ? "Enable easy-read font" : "Disable easy-read font"}
+            className={`flex items-center justify-center min-h-[44px] min-w-[44px] px-2 rounded-full border transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${
+              fontMode === "dyslexic"
+                ? "border-[var(--accent)] text-[var(--accent)] bg-[var(--surface-elevated)]"
+                : "border-[var(--navbar-icon-border)] text-[var(--navbar-icon-color)] hover:border-[var(--accent)]/50 hover:text-[var(--accent)]"
+            }`}
+          >
+            <span className="font-bold text-xs tracking-wider uppercase" aria-hidden="true">
+              Aa
+            </span>
+          </button>
+
+          {/* Wallet area */}
+          {connecting ? (
+            <ConnectingSkeleton />
+          ) : connected && address ? (
+            <WalletStatus
+              address={address}
+              network={network ?? "TESTNET"}
+              expectedNetwork={expectedNetwork}
+              isNetworkMismatch={isNetworkMismatch}
+              onDisconnect={disconnect}
+            />
+          ) : (
+            <Link
+              to="/connect-wallet"
+              aria-label="Connect your Stellar wallet"
+              className="px-5 h-[44px] rounded-full bg-[var(--cta-bg)] text-white text-sm font-semibold shadow-[var(--cta-shadow)] hover:opacity-90 transition-opacity outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] flex items-center"
             >
               {mobileMenuOpen ? (
                 <X size={22} aria-hidden="true" />
@@ -513,8 +536,21 @@ const location = useLocation();
               <Type size={16} aria-hidden="true" />
             </button>
 
-            {/* Theme toggle */}
-            <ThemeSegmentedControl />
+            <button
+              onClick={toggleFontMode}
+              aria-label={`Switch to ${fontMode === "default" ? "easy-read dyslexia-friendly" : "default"} font`}
+              aria-pressed={fontMode === "dyslexic"}
+              title={fontMode === "default" ? "Enable easy-read font" : "Disable easy-read font"}
+              className={`flex items-center justify-center min-h-[44px] min-w-[44px] px-2 rounded-full border transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${
+                fontMode === "dyslexic"
+                  ? "border-[var(--accent)] text-[var(--accent)] bg-[var(--surface-elevated)]"
+                  : "border-[var(--navbar-icon-border)] text-[var(--navbar-icon-color)] hover:border-[var(--accent)]/50 hover:text-[var(--accent)]"
+              }`}
+            >
+              <span className="font-bold text-xs tracking-wider uppercase" aria-hidden="true">
+                Aa
+              </span>
+            </button>
 
             {connecting ? (
               <ConnectingSkeleton />
