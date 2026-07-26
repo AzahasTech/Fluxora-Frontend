@@ -30,6 +30,7 @@ describe("streamsService live mode", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -97,6 +98,7 @@ describe("streamsService live mode", () => {
   });
 
   it("propagates network errors as StreamsServiceError", async () => {
+    vi.stubEnv("VITE_FETCH_MAX_RETRIES", "0");
     fetchMock.mockRejectedValue(new Error("connection refused"));
 
     await expect(getStreams()).rejects.toMatchObject({
@@ -246,6 +248,69 @@ describe("streamsService live mode", () => {
     const metrics = await getTreasuryMetrics();
     expect(metrics).toHaveLength(1);
     expect(metrics[0]!.label).toBe("Active Streams");
+  });
+
+  it("honors VITE_FETCH_MAX_RETRIES=0 with exactly zero retries", async () => {
+    vi.stubEnv("VITE_FETCH_MAX_RETRIES", "0");
+    fetchMock.mockRejectedValue(new Error("connection refused"));
+
+    await expect(getStreams()).rejects.toMatchObject({ kind: "network" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("honors VITE_FETCH_INITIAL_DELAY_MS=0 with no backoff delay", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("VITE_FETCH_MAX_RETRIES", "1");
+    vi.stubEnv("VITE_FETCH_INITIAL_DELAY_MS", "0");
+
+    fetchMock
+      .mockRejectedValueOnce(new Error("connection refused"))
+      .mockResolvedValueOnce(jsonResponse({ data: [] }));
+
+    const promise = getStreams();
+    // Explicit 0 must schedule an immediate retry — advancing 0ms is enough.
+    // A mistaken 500ms default would leave the promise pending here.
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(promise).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("falls back to default retries when VITE_FETCH_MAX_RETRIES is unset", async () => {
+    vi.useFakeTimers();
+    fetchMock.mockRejectedValue(new Error("connection refused"));
+
+    // Attach the rejection handler before advancing timers to avoid unhandled rejections.
+    const assertion = expect(getStreams()).rejects.toMatchObject({
+      kind: "network",
+    });
+    // Default maxRetries=3 → 1 initial attempt + 3 retries = 4 fetch calls.
+    for (let i = 0; i < 3; i++) {
+      await vi.advanceTimersByTimeAsync(8_000);
+    }
+    await assertion;
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("falls back to defaults when fetch retry env vars are non-numeric", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("VITE_FETCH_MAX_RETRIES", "not-a-number");
+    vi.stubEnv("VITE_FETCH_INITIAL_DELAY_MS", "also-bad");
+    fetchMock.mockRejectedValue(new Error("connection refused"));
+
+    const assertion = expect(getStreams()).rejects.toMatchObject({
+      kind: "network",
+    });
+
+    // First retry uses the default 500ms initial delay.
+    await vi.advanceTimersByTimeAsync(499);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await assertion;
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 });
 
