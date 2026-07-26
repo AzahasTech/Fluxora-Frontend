@@ -129,6 +129,8 @@ export function validateRow(row: Omit<CsvRow, 'id' | 'rowNumber' | 'status' | 'f
   const deposit = parseFloat(row.depositAmount);
   if (!row.depositAmount.trim() || isNaN(deposit) || deposit <= 0) {
     errors.deposit_amount = 'Deposit must be a positive number';
+  } else if (deposit > MAX_DEPOSIT_AMOUNT) {
+    errors.deposit_amount = `Deposit may not exceed ${MAX_DEPOSIT_AMOUNT.toLocaleString()} USDC`;
   } else {
     // Max 7 decimal places
     const parts = row.depositAmount.split('.');

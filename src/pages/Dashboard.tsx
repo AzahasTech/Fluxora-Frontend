@@ -12,6 +12,7 @@ import { useLiveAnnouncer } from "../hooks/useLiveAnnouncer";
 import { useWallet } from "../components/wallet-connect/Walletcontext";
 import { useTreasury } from "../components/treasuryOverviewPage/useTreasury";
 import { readOnboardingDismissed } from "../lib/onboarding";
+import { formatAssetAmount } from "../lib/formatters";
 import { formatUsdc, toRecentStream } from "../lib/recentStreamMapper";
 import Button from "../components/Button";
 import "../design-tokens.css";
@@ -25,7 +26,6 @@ export default function Dashboard() {
     variant: ToastVariant;
   } | null>(null);
   const [withdrawable, setWithdrawable] = useState<number | null>(null);
-  const [totalStreaming, setTotalStreaming] = useState<number | null>(null);
   const { announcement, announce } = useLiveAnnouncer();
   const wallet = useWallet();
   const walletConnected = wallet.connected;
@@ -46,7 +46,6 @@ export default function Dashboard() {
 
   useEffect(() => {
     setWithdrawable(walletConnected ? 22600 : null);
-    setTotalStreaming(walletConnected ? 48500 : null);
   }, [walletConnected]);
 
   useEffect(() => {
@@ -77,7 +76,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (withdrawable !== null) {
       announce(
-        `Available balance updated to ${withdrawable.toLocaleString()} USDC.`,
+        `Available balance updated to ${formatAssetAmount(withdrawable, "USDC")}.`,
       );
     }
   }, [withdrawable, announce]);
