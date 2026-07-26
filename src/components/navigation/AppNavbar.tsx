@@ -446,7 +446,8 @@ const location = useLocation();
                 Connect Wallet
               </Link>
             )}
-          </button>
+
+          </div>
 
           {/* Easy-read font toggle */}
           <button
@@ -487,7 +488,7 @@ const location = useLocation();
               ) : (
                 <Menu size={22} aria-hidden="true" />
               )}
-            </button>
+            </Link>
           )}
         </div>
       </div>
