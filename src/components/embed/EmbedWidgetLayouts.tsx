@@ -2,6 +2,7 @@ import React from "react";
 import StreamTimeline from "../StreamTimeline";
 import { StreamRecord, StreamStatus } from "../../data/streamRecords";
 import { ThemeConfig } from "../../lib/embedThemeParser";
+import { formatNumber } from "../../lib/formatters";
 import "./EmbedWidgetLayouts.css";
 
 interface EmbedWidgetLayoutProps {
@@ -60,18 +61,18 @@ export function EmbedWidgetLayoutCard({
         <div className="embed-widget-card__metrics">
           <MetricItem
             label="Payment Rate"
-            value={`$${stream.monthlyRate.toLocaleString()}/month`}
-            ariaLabel={`Monthly payment rate: $${stream.monthlyRate.toLocaleString()}`}
+            value={`$${formatNumber(stream.monthlyRate)}/month`}
+            ariaLabel={`Monthly payment rate: $${formatNumber(stream.monthlyRate)}`}
           />
           <MetricItem
             label="Streamed"
-            value={`$${stream.streamedAmount.toLocaleString()}`}
-            ariaLabel={`Amount streamed: $${stream.streamedAmount.toLocaleString()}`}
+            value={`$${formatNumber(stream.streamedAmount)}`}
+            ariaLabel={`Amount streamed: $${formatNumber(stream.streamedAmount)}`}
           />
           <MetricItem
             label="Remaining"
-            value={`$${stream.remainingAmount.toLocaleString()}`}
-            ariaLabel={`Remaining amount: $${stream.remainingAmount.toLocaleString()}`}
+            value={`$${formatNumber(stream.remainingAmount)}`}
+            ariaLabel={`Remaining amount: $${formatNumber(stream.remainingAmount)}`}
           />
         </div>
         
@@ -169,9 +170,9 @@ export function EmbedWidgetLayoutBanner({
       <div className="embed-widget-banner__metrics">
         <MetricItem
           label="Rate"
-          value={`$${stream.monthlyRate.toLocaleString()}/mo`}
+          value={`$${formatNumber(stream.monthlyRate)}/mo`}
           compact
-          ariaLabel={`Monthly payment rate: $${stream.monthlyRate.toLocaleString()}`}
+          ariaLabel={`Monthly payment rate: $${formatNumber(stream.monthlyRate)}`}
         />
         <div className="embed-widget-banner__progress">
           <span className="embed-widget-banner__progress-label">Progress</span>

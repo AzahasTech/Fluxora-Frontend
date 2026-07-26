@@ -56,6 +56,8 @@ export default defineConfig({
         "src/utils/contrastUtils.ts",
         // Activity Heatmap
         "src/components/treasuryOverviewPage/ActivityHeatmap.tsx",
+        // Treasury flow Sankey diagram
+        "src/components/treasuryOverviewPage/TreasuryFlowSankey.tsx",
         // Presence feature
         "src/components/presence/PresenceBadge.tsx",
         "src/components/presence/PresenceViewerList.tsx",

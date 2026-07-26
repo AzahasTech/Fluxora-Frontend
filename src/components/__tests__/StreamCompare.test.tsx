@@ -437,4 +437,27 @@ describe("StreamComparePane", () => {
       expect(screen.getByText(/not found/i)).toBeInTheDocument();
     });
   });
+
+  it("formats large safe integer amounts via formatAssetAmount instead of toLocaleString", async () => {
+    const largeRecord: StreamRecord = {
+      ...recordA,
+      monthlyRate: Number.MAX_SAFE_INTEGER,
+      depositAmount: Number.MAX_SAFE_INTEGER,
+      streamedAmount: Number.MAX_SAFE_INTEGER,
+      withdrawableAmount: Number.MAX_SAFE_INTEGER,
+      remainingAmount: Number.MAX_SAFE_INTEGER,
+    };
+    vi.mocked(streamsService.getStreamById).mockResolvedValue(largeRecord);
+
+    renderComparePane("STR-001", "STR-002");
+    await waitFor(() => {
+      expect(screen.getByText("Alpha Grant")).toBeInTheDocument();
+    });
+
+    // All five numeric fields should use the shared formatter
+    const formatted = screen.getAllByText(/9,007,199,254,740,991 USDC/);
+    // depositAmount, streamedAmount, withdrawableAmount, remainingAmount = 4 digits-only
+    // monthlyRate appends "/mo" so it won't match this pattern → 4 matches
+    expect(formatted.length).toBeGreaterThanOrEqual(4);
+  });
 });

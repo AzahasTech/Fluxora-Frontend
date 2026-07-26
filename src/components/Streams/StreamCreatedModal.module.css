@@ -214,6 +214,11 @@
   background: #2a3d58;
 }
 
+.copyButton:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px #0d1421, 0 0 0 4px #00b8d4;
+}
+
 .copyButton.copied {
   background: #00d4aa;
   color: #ffffff;

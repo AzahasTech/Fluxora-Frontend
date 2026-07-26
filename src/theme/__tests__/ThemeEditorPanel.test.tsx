@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, within, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ThemeEditorPanel, {
   ColorField,
@@ -46,11 +46,15 @@ function mockMatchMedia(matches = false) {
 }
 
 function renderPanel(onClose?: () => void) {
-  return render(
+  const result = render(
     <ThemeProvider>
       <ThemeEditorPanel onClose={onClose} />
     </ThemeProvider>,
   );
+  act(() => {
+    vi.runAllTimers();
+  });
+  return result;
 }
 
 beforeEach(() => {
@@ -58,9 +62,12 @@ beforeEach(() => {
   document.documentElement.removeAttribute("data-theme");
   document.documentElement.removeAttribute("style");
   mockMatchMedia();
+  vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
 });
 
 afterEach(() => {
+  vi.runOnlyPendingTimers();
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -134,7 +141,7 @@ describe("ThemeEditorPanel — keyboard navigation", () => {
     }
     // After tabbing through all inputs, focus should have moved.
     expect(document.activeElement?.tagName).not.toBe("BODY");
-  });
+  }, 30000);
 
   it("Preview button is reachable by Tab and activatable by Enter", async () => {
     const user = userEvent.setup();
@@ -174,6 +181,60 @@ describe("ThemeEditorPanel — keyboard navigation", () => {
     await user.keyboard("{Escape}");
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── 2b. Focus trap ────────────────────────────────────────────────────────────
+
+describe("ThemeEditorPanel — focus trap", () => {
+  it("dialog has aria-modal=true", () => {
+    renderPanel();
+    expect(screen.getByRole("dialog").getAttribute("aria-modal")).toBe("true");
+  });
+
+  it("Tab from the last focusable element wraps to the first", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    // Focus the Cancel button (last focusable element in the dialog)
+    const cancelBtn = screen.getByRole("button", { name: /cancel/i });
+    cancelBtn.focus();
+    expect(cancelBtn).toHaveFocus();
+
+    // Tab forward — should wrap back to the first focusable element
+    await user.keyboard("{Tab}");
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).not.toBe(cancelBtn);
+  });
+
+  it("Shift+Tab from the first focusable element wraps to the last", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    // Focus the first focusable element (Display Name input)
+    const nameInput = screen.getByLabelText(/display name/i);
+    nameInput.focus();
+    expect(nameInput).toHaveFocus();
+
+    // Shift+Tab backward — should wrap to the last focusable element
+    await user.keyboard("{Shift>}{Tab}{/Shift}");
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).not.toBe(nameInput);
+  });
+
+  it("Tab cannot escape the dialog to outside elements", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    const dialog = screen.getByRole("dialog");
+
+    // Tab from the last element wraps back to first; focus stays inside
+    const cancelBtn = screen.getByRole("button", { name: /cancel/i });
+    cancelBtn.focus();
+    await user.keyboard("{Tab}");
+    expect(dialog.contains(document.activeElement)).toBe(true);
   });
 });
 

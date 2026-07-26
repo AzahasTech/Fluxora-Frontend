@@ -1,7 +1,7 @@
 import React from "react";
 import "./StreamTimeline.module.css";
 import { usePrefersReducedMotion } from "../hooks/usePrefersReducedMotion";
-import { createDateTimeFormat } from "../lib/formatters";
+import { createDateTimeFormat, formatNumber } from "../lib/formatters";
 
 export interface StreamTimelineProps {
   startDate: string;
@@ -146,8 +146,8 @@ export const StreamTimeline: React.FC<StreamTimelineProps> = ({
           <li>End date: {formatDate(end)}</li>
           <li>Stream status: {status}</li>
           <li>Progress: {accrualPercent.toFixed(0)}% complete</li>
-          <li>Withdrawable: ${withdrawableAmount.toLocaleString()}</li>
-          <li>Total amount: ${totalAmount.toLocaleString()}</li>
+          <li>Withdrawable: ${formatNumber(withdrawableAmount)}</li>
+          <li>Total amount: ${formatNumber(totalAmount)}</li>
         </ul>
       </div>
 

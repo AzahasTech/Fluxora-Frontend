@@ -3,6 +3,7 @@ import DemoBanner, { type DemoState } from "../components/treasuryOverviewPage/D
 import Header from "../components/treasuryOverviewPage/Header";
 import Metrics from "../components/treasuryOverviewPage/Metrics";
 import ActivityHeatmap from "../components/treasuryOverviewPage/ActivityHeatmap";
+import TreasuryFlowSankey from "../components/treasuryOverviewPage/TreasuryFlowSankey";
 import RecentStreams from "../components/treasuryOverviewPage/RecentStreams";
 import ReportBuilderPanel from "../components/treasuryOverviewPage/ReportBuilderPanel";
 import { useTreasuryOverviewData } from "../components/treasuryOverviewPage/useTreasuryOverviewData";
@@ -11,7 +12,6 @@ import {
   ColorBlindToggle,
 } from "../components/colorBlindSimulation";
 import { useWallet } from "../components/wallet-connect/Walletcontext";
-import { useMemo } from "react"; // wait, let's keep all existing structure untouched as much as possible, let's check existing imports.
 
 /**
  * TreasuryPage renders the treasury overview.
@@ -98,6 +98,7 @@ export default function TreasuryPage() {
         )}
         <Metrics metrics={metrics || []} loading={loading} error={error} />
         <ActivityHeatmap streams={streams || []} loading={loading} error={error} />
+        <TreasuryFlowSankey streams={streams || []} loading={loading} error={error} />
         <RecentStreams
           streams={streams || []}
           loading={loading}

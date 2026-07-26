@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /** Copy feedback state exposed by {@link useClipboard}. */
-export type ClipboardStatus = "idle" | "copied" | "failed";
+export type ClipboardStatus = "idle" | "copied" | "shared" | "cancelled" | "failed";
+
+export interface SharePayload {
+  title?: string;
+  text?: string;
+  url?: string;
+}
 
 export interface UseClipboardResult {
   /**
@@ -12,8 +18,15 @@ export interface UseClipboardResult {
    * Resolves to `true` on success and `false` on failure.
    */
   copy: (text: string) => Promise<boolean>;
+  /** Trigger the native Web Share API when available. */
+  share: (payload: SharePayload) => Promise<"shared" | "cancelled" | "failed">;
   /** Current feedback state. */
   status: ClipboardStatus;
+  /** Feature support flags for the current environment. */
+  support: {
+    clipboard: boolean;
+    share: boolean;
+  };
   /** Force `status` back to `"idle"` immediately and cancel the pending reset. */
   reset: () => void;
 }
@@ -59,6 +72,26 @@ export async function copyToClipboard(text: string): Promise<boolean> {
   return fallbackCopy(text);
 }
 
+export function isShareSupported(): boolean {
+  return typeof window !== "undefined" && typeof navigator !== "undefined" && typeof navigator.share === "function";
+}
+
+export async function shareText(payload: SharePayload): Promise<"shared" | "cancelled" | "failed"> {
+  if (!isShareSupported()) {
+    return "failed";
+  }
+
+  try {
+    await navigator.share(payload);
+    return "shared";
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return "cancelled";
+    }
+    return "failed";
+  }
+}
+
 /**
  * useClipboard — write-only clipboard helper with consistent success/failure
  * feedback. It never reads from the clipboard (reading requires a separate
@@ -77,6 +110,10 @@ export async function copyToClipboard(text: string): Promise<boolean> {
 export function useClipboard(resetDelay = 2000): UseClipboardResult {
   const [status, setStatus] = useState<ClipboardStatus>("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [support] = useState(() => ({
+    clipboard: typeof navigator !== "undefined" && !!navigator.clipboard?.writeText,
+    share: isShareSupported(),
+  }));
 
   const clearTimer = useCallback(() => {
     if (timer.current) {
@@ -102,9 +139,28 @@ export function useClipboard(resetDelay = 2000): UseClipboardResult {
     [clearTimer, resetDelay],
   );
 
+  const share = useCallback(
+    async (payload: SharePayload): Promise<"shared" | "cancelled" | "failed"> => {
+      clearTimer();
+      const outcome = await shareText(payload);
+
+      if (outcome === "shared") {
+        setStatus("shared");
+      } else if (outcome === "cancelled") {
+        setStatus("cancelled");
+      } else {
+        setStatus("failed");
+      }
+
+      timer.current = setTimeout(() => setStatus("idle"), resetDelay);
+      return outcome;
+    },
+    [clearTimer, resetDelay],
+  );
+
   // Clear any pending timer on unmount.
   useEffect(() => clearTimer, [clearTimer]);
 
-  return { copy, status, reset };
+  return { copy, share, status, support, reset };
 }
 
