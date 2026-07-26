@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import StreamRow from "./StreamRow";
 import { Stream } from "./Stream";
+import "./StreamsTable.css";
 
 export type SortColumn = "stream" | "recipient" | "rate" | "status";
 export type SortDirection = "asc" | "desc";
@@ -132,7 +133,7 @@ export default function StreamsTable({ streams, onCompare }: Props) {
   const canCompare = compareIds.length === 2;
 
   return (
-    <div>
+    <div className="streams-table-container">
       {/* ── Compare action bar ── */}
       {compareIds.length > 0 && (
         <div

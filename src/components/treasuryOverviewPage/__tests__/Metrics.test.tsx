@@ -43,6 +43,27 @@ describe("Metrics", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+   it("has the metrics-grid-container class on the section for container-query reflow", () => {
+    render(<Metrics metrics={treasuryDemoMetrics} />);
+
+    const sectionEl = screen.getByRole("region", { name: /Treasury metrics/i });
+    expect(sectionEl).toHaveClass("metrics-grid-container");
+  });
+
+  it("every metric card has overflow-safe styles for 400%-zoom reflow", () => {
+    render(<Metrics metrics={treasuryDemoMetrics} />);
+
+    const cards = screen.getAllByRole("group");
+    expect(cards.length).toBe(treasuryDemoMetrics.length);
+
+    cards.forEach((card) => {
+      const style = card.getAttribute("style") || "";
+      expect(style).toContain("var(--color-surface-default)");
+      expect(style).toContain("min-width");
+      expect(style).toContain("overflow");
+    });
+  });
+
   describe("locale resilience", () => {
     afterEach(() => {
       Object.defineProperty(navigator, "language", {
