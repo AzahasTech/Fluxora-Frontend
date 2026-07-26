@@ -209,13 +209,14 @@ export default function Metrics({ metrics, loading, error }: MetricsProps) {
 
       if (sourceIdx !== -1 && targetIdx !== -1) {
         const newConfigs = [...layout.widgets];
-        const srcConfig = newConfigs.find((w) => w.id === sourceId);
-        const destConfig = newConfigs.find((w) => w.id === targetId);
+        const srcConfigIdx = newConfigs.findIndex((w) => w.id === sourceId);
+        const destConfigIdx = newConfigs.findIndex((w) => w.id === targetId);
 
-        if (srcConfig && destConfig) {
-          const temp = srcConfig.order;
-          srcConfig.order = destConfig.order;
-          destConfig.order = temp;
+        if (srcConfigIdx !== -1 && destConfigIdx !== -1) {
+          const srcOrder = newConfigs[srcConfigIdx].order;
+          const destOrder = newConfigs[destConfigIdx].order;
+          newConfigs[srcConfigIdx] = { ...newConfigs[srcConfigIdx], order: destOrder };
+          newConfigs[destConfigIdx] = { ...newConfigs[destConfigIdx], order: srcOrder };
 
           reorderWidgets(newConfigs);
 
@@ -394,3 +395,6 @@ export default function Metrics({ metrics, loading, error }: MetricsProps) {
     </div>
   );
 }
+
+
+
