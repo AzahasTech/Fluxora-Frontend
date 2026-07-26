@@ -1,8 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
-import React from 'react';
 import { describe, test, expect, vi } from 'vitest';
 import CreateStreamModal from '../CreateStreamModal';
-import { getContrastRatio, THEME_BACKGROUNDS } from '../../utils/contrastUtils';
+import { getContrastRatio } from '../../utils/contrastUtils';
 
 // Mock WalletContext & ToastProvider & i18n
 vi.mock('../wallet-connect/Walletcontext', () => ({

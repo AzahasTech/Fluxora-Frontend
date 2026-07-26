@@ -130,12 +130,10 @@ export default function Recipient() {
 
   // ── Local Security Gate States ──
   const [isBiometricSupported, setIsBiometricSupported] = useState(false);
-  const [isBiometricEnrolled, setIsBiometricEnrolled] = useState(() => {
-    return localStorage.getItem("fluxora_biometric_enrolled") === "true";
-  });
-  const [backupPin, setBackupPin] = useState(() => {
-    return localStorage.getItem("fluxora_backup_pin");
-  });
+  const isBiometricEnrolled =
+    typeof window !== "undefined"
+      ? localStorage.getItem("fluxora_biometric_enrolled") === "true"
+      : false;
   const [isSecurityGateEnabled, setIsSecurityGateEnabled] = useState(() => {
     return localStorage.getItem("fluxora_security_gate_enabled") === "true";
   });
@@ -150,7 +148,7 @@ export default function Recipient() {
   // Verification Modal States
   const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
   const [verifyState, setVerifyState] = useState('prompt-active');
-  const [verifyPinValue, setVerifyPinValue] = useState("");
+  const [, setVerifyPinValue] = useState("");
   const [verifyActionType, setVerifyActionType] = useState('withdraw');
   const [verifyError, setVerifyError] = useState<string | null>(null);
 
@@ -337,21 +335,6 @@ export default function Recipient() {
     isPending ||
     !selectedWithdrawStream;
 
-  const handleToggleSecurityGate = () => {
-    if (isSecurityGateEnabled) {
-      setVerifyActionType("disable_gate");
-      setVerifyState(isBiometricEnrolled && isBiometricSupported ? "prompt-active" : "unsupported-device-fallback");
-      setVerifyPinValue("");
-      setVerifyError(null);
-      setIsVerifyModalOpen(true);
-    } else {
-      setIsEnrollmentModalOpen(true);
-      setEnrollmentStep(isBiometricSupported ? "check-support" : "set-pin");
-      setPinValue("");
-      setConfirmPinValue("");
-      setEnrollmentError(null);
-    }
-  };
 
   const handleUpdatePIN = () => {
     setIsEnrollmentModalOpen(true);
@@ -408,7 +391,7 @@ export default function Recipient() {
           publicKey: {
             challenge,
             timeout: 60000,
-            userVerification: "required"
+            userVerification: "required" as const
           }
         } as CredentialRequestOptions;
         await navigator.credentials.get(options);

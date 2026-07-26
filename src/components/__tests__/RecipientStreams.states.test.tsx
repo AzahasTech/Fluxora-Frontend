@@ -41,7 +41,7 @@ describe("RecipientStreams (real fetchStreamsFn API)", () => {
     expect(fetchStreamsFn).toHaveBeenCalledTimes(1);
 
     const amountPattern = new RegExp(
-      `${sampleStream.amount.replace(/[,]/g, "[,\\s]")}\\s+XLM`,
+      `${String(sampleStream.amount).replace(/[,]/g, "[,\\s]")}\\s+XLM`,
     );
     const row = await screen.findByText(amountPattern);
     expect(row).toBeInTheDocument();
@@ -70,7 +70,7 @@ describe("RecipientStreams (real fetchStreamsFn API)", () => {
       expect(
         screen.getByText(
           new RegExp(
-            `${sampleStream.amount.replace(/[,]/g, "[,\\s]")}\\s+XLM`,
+            `${String(sampleStream.amount).replace(/[,]/g, "[,\\s]")}\\s+XLM`,
           ),
         ),
       ).toBeInTheDocument(),
@@ -89,7 +89,7 @@ describe("RecipientStreams (real fetchStreamsFn API)", () => {
       expect(
         screen.getByText(
           new RegExp(
-            `${sampleStream.amount.replace(/[,]/g, "[,\\s]")}\\s+XLM`,
+            `${String(sampleStream.amount).replace(/[,]/g, "[,\\s]")}\\s+XLM`,
           ),
         ),
       ).toBeInTheDocument(),

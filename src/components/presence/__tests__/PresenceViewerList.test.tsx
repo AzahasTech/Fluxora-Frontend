@@ -37,6 +37,16 @@ describe("PresenceViewerList", () => {
     expect(handleClose).not.toHaveBeenCalled();
   });
 
+  it("renders viewer rows without tabIndex so they are not keyboard-focusable", () => {
+    render(<PresenceViewerList viewers={[mockViewer1]} onClose={vi.fn()} />);
+
+    const rows = screen.getAllByRole("listitem");
+    expect(rows).toHaveLength(1);
+    rows.forEach((row) => {
+      expect(row).not.toHaveAttribute("tabindex");
+    });
+  });
+
   it("renders raw id if not a Stellar address and displayName is null", () => {
     const mockViewer: Viewer = {
       id: "G-short",

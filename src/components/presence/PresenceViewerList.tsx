@@ -52,7 +52,6 @@ export default function PresenceViewerList({ viewers, onClose }: PresenceViewerL
             key={viewer.id}
             role="listitem"
             className="presence-viewer-row"
-            tabIndex={0}
           >
             <span
               className="presence-viewer-dot"

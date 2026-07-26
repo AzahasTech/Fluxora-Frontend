@@ -1,13 +1,8 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
-import StreamTimeline from "../components/StreamTimeline";
 import { Skeleton } from "../components/Skeleton";
 import { useTickingNow } from "../hooks/useTickingNow";
-import { 
-  StreamRecord, 
-  StreamStatus, 
-  StreamHealth 
-} from "../data/streamRecords";
+import { StreamRecord } from "../data/streamRecords";
 import { getStreamById } from "../lib/api/streamsService";
 import { 
   parseThemeFromQuery, 

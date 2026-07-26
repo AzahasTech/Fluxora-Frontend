@@ -142,7 +142,7 @@ export default function Metrics({ metrics, loading, error }: MetricsProps) {
   const orderedMetrics = useMemo(() => {
     const sortedConfigs = [...layout.widgets].sort((a, b) => a.order - b.order);
     const visible: { metric: Metric; config: WidgetConfig }[] = [];
-    const hidden: { metric: Metric; config: WidgetConfig }[] = [];
+    const hidden: { metric: Metric; id: string }[] = [];
 
     sortedConfigs.forEach((config) => {
       const match = metrics.find((m) => slugify(m.label) === config.id);
@@ -150,7 +150,7 @@ export default function Metrics({ metrics, loading, error }: MetricsProps) {
         if (config.visible) {
           visible.push({ metric: match, config });
         } else {
-          hidden.push({ metric: match, config });
+          hidden.push({ metric: match, id: config.id });
         }
       }
     });
@@ -241,7 +241,7 @@ export default function Metrics({ metrics, loading, error }: MetricsProps) {
     }
   };
 
-  const handleTrayDragLeave = (id: string) => {
+  const handleTrayDragLeave = (_e: React.DragEvent, id: string) => {
     if (invalidDragOverId === id) {
       setInvalidDragOverId(null);
     }

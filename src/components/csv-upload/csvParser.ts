@@ -21,6 +21,7 @@ export const MAX_CSV_ROWS = 500;
  * Sized generously for {@link MAX_CSV_ROWS} short rows (~20× a typical 500-row export).
  */
 export const MAX_CSV_FILE_SIZE_BYTES = 1_048_576; // 1 MiB
+export const MAX_DEPOSIT_AMOUNT = 10_000_000;
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 

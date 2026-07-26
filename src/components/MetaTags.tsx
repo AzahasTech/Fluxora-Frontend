@@ -14,7 +14,7 @@ export const MetaTags: React.FC<{ stream: StreamRecord }> = ({ stream }) => {
     : `https://fluxora.app/og-image/${stream.id}.png`;
   const ogTitle = `${stream.name} – Fluxora`;
   const ogDescription = stream.summary ?? 'Stream treasury capital on Stellar';
-  const ogAlt = `Fluxora stream ${stream.name}, status ${stream.status}, recipient ${stream.recipient}`;
+  const ogAlt = `Fluxora stream ${stream.name}, status ${stream.status}, recipient ${stream.recipientName}`;
 
   return (
     <Helmet>

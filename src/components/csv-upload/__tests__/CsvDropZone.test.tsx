@@ -18,10 +18,10 @@ const TWO_ROW_CSV =
   'GTESTRECIPIENT1111111111111111111111111111111111111111,200,5,60\n';
 
 describe('CsvDropZone', () => {
-  let onParsed: ReturnType<typeof vi.fn>;
+  let onParsed: ReturnType<typeof vi.fn> & ((result: ParseResult, fileName: string, rawText: string) => void);
 
   beforeEach(() => {
-    onParsed = vi.fn();
+    onParsed = vi.fn() as unknown as ReturnType<typeof vi.fn> & ((result: ParseResult, fileName: string, rawText: string) => void);
   });
 
   afterEach(() => {
