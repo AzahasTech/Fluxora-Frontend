@@ -1521,11 +1521,10 @@ export default function CreateStreamModal({
                         </div>
                       </div>
                     )}
-                  </div>
-                </InputField>
-                </>
-              );
-            })()}
+                      </div>
+                    </>
+                  );
+                })()}
             <div className="info-box" role="region" aria-labelledby="info-box-title">
               <div id="info-box-title" className="info-box-title">{t("createStream.step1.infoBoxTitle")}</div>
               <p className="info-box-text">

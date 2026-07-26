@@ -12,11 +12,10 @@ import { withdraw } from "../lib/stellar/tx";
 import { getStreamStatusNotificationContent } from "../components/ToastNotification";
 import { TransactionReceiptPreview } from "../components/receipt/TransactionReceiptPreview";
 import type { ReceiptData } from "../utils/receiptGenerator";
-import { Shield, Fingerprint, Lock, Unlock, Key, CheckCircle2, XCircle, AlertCircle, X, Loader2 } from "lucide-react";
+import { Shield, Fingerprint, Lock, Key, CheckCircle2, XCircle, AlertCircle, X } from "lucide-react";
 import RecipientMonthlySummary from "../components/recipient/RecipientMonthlySummary";
 import "./Streams.css";
 import "./Recipient.css";
-import { TRANSACTION_RESET_DELAY_MS } from "../lib/transactionConfig";
 import { useFaviconBadge } from "../utils/faviconBadge";
 import { useModalAccessibility } from "../components/useModalAccessibility";
 
@@ -101,7 +100,6 @@ export function getRecipientPageTitle(
 }
 
 export default function Recipient() {
-  const timeoutRef = useRef<number | null>(null);
   const wallet = useWallet();
   const { addToast } = useToast();
 
@@ -147,14 +145,14 @@ export default function Recipient() {
   const [enrollmentStep, setEnrollmentStep] = useState('check-support');
   const [pinValue, setPinValue] = useState("");
   const [confirmPinValue, setConfirmPinValue] = useState("");
-  const [enrollmentError, setEnrollmentError] = useState(null);
+  const [enrollmentError, setEnrollmentError] = useState<string | null>(null);
 
   // Verification Modal States
   const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
   const [verifyState, setVerifyState] = useState('prompt-active');
   const [verifyPinValue, setVerifyPinValue] = useState("");
   const [verifyActionType, setVerifyActionType] = useState('withdraw');
-  const [verifyError, setVerifyError] = useState(null);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
 
   // Refs for modal accessibility
   const enrollmentModalRef = useRef(null);
@@ -385,7 +383,7 @@ export default function Recipient() {
             },
             timeout: 60000
           }
-        };
+        } as CredentialCreationOptions;
         await navigator.credentials.create(options);
       } else {
         await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -393,9 +391,10 @@ export default function Recipient() {
       localStorage.setItem("fluxora_biometric_enrolled", "true");
       setIsBiometricEnrolled(true);
       setEnrollmentStep("set-pin");
-    } catch (err) {
-      setEnrollmentError(err.message || "Failed to register biometrics.");
-    }
+} catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Failed to register biometrics.";
+        setEnrollmentError(message);
+      }
   };
 
   const triggerBiometricVerification = async () => {
@@ -411,18 +410,19 @@ export default function Recipient() {
             timeout: 60000,
             userVerification: "required"
           }
-        };
+        } as CredentialRequestOptions;
         await navigator.credentials.get(options);
       } else {
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
       handleVerificationSuccess();
-    } catch (err) {
-      if (err.name === "NotAllowedError" || err.name === "AbortError") {
+    } catch (err: unknown) {
+      const error = err as { name?: string; message?: string };
+      if (error.name === "NotAllowedError" || error.name === "AbortError") {
         setVerifyState("prompt-cancelled");
       } else {
         setVerifyState("prompt-failed");
-        setVerifyError(err.message || "Biometric verification failed.");
+        setVerifyError(error.message || "Biometric verification failed.");
       }
     }
   };
@@ -447,7 +447,7 @@ export default function Recipient() {
     }
   }, [isVerifyModalOpen, verifyState]);
 
-  const handleEnrollPinKeyPress = (key) => {
+  const handleEnrollPinKeyPress = (key: string) => {
     setEnrollmentError(null);
     const activePin = enrollmentStep === "set-pin" ? pinValue : confirmPinValue;
     const setActivePin = enrollmentStep === "set-pin" ? setPinValue : setConfirmPinValue;
@@ -489,7 +489,7 @@ export default function Recipient() {
     }
   };
 
-  const handleVerifyPinKeyPress = (key) => {
+  const handleVerifyPinKeyPress = (key: string) => {
     setVerifyError(null);
     if (key === "backspace") {
       setVerifyPinValue(verifyPinValue.slice(0, -1));
@@ -566,10 +566,11 @@ export default function Recipient() {
       setShowReceiptModal(true);
       addToast("Withdrawal completed successfully on-chain!", "success");
       timerRef.current = setTimeout(() => setTxState("idle"), 5000);
-    } catch (err) {
+    } catch (err: unknown) {
+      const error = err as Error;
       setTxState("error");
-      setErrorMsg(err.message || "Withdrawal failed.");
-      addToast(`Withdrawal failed: ${err.message || err}`, "error");
+      setErrorMsg(error.message || "Withdrawal failed.");
+      addToast(`Withdrawal failed: ${error.message || error}`, "error");
     }
   };
 
