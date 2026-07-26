@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { VoiceConfirmModal } from "../VoiceConfirmModal";
-import { VoiceContextValue, VoiceState, VoiceCommandDef } from "../voiceTypes";
+import { VoiceContextValue, VoiceCommandDef } from "../voiceTypes";
 
 // Mock useVoiceContext
 let mockContext: VoiceContextValue;
@@ -116,12 +116,12 @@ describe("VoiceConfirmModal", () => {
       cancelDestructiveAction: cancelFn,
     });
     const { unmount } = render(<VoiceConfirmModal />);
-    // First Escape while mounted — should fire
+    // First Escape while mounted ï¿½ should fire
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     expect(cancelFn).toHaveBeenCalledTimes(1);
 
     unmount();
-    // Second Escape after unmount — should not fire
+    // Second Escape after unmount ï¿½ should not fire
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     expect(cancelFn).toHaveBeenCalledTimes(1);
   });

@@ -28,7 +28,7 @@ export interface Viewer {
  * - `presenceStatus`: Current availability state for the presence feature.
  */
 export function usePresenceViewers(
-  _streamId?: string,
+  streamId?: string,
   __devMockViewers: Viewer[] = []
 ) {
   const hasRealPresenceTransport = false;
