@@ -462,6 +462,27 @@ describe("unavailable wallet options (Albedo, WalletConnect)", () => {
       expect(confirmBtn).not.toBeDisabled();
     });
 
+    it("focuses custom derivation path input programmatically when selected", async () => {
+      vi.useFakeTimers();
+      render(
+        <ConnectWalletModal
+          isOpen={true}
+          onClose={onClose}
+          errorState="device-found-selecting"
+        />
+      );
+
+      const select = screen.getByLabelText("Derivation Path");
+      await userEvent.selectOptions(select, "custom");
+
+      // Fast-forward timers for the setTimeout focus
+      vi.advanceTimersByTime(100);
+
+      const input = screen.getByLabelText("Enter custom Stellar derivation path");
+      expect(input).toHaveFocus();
+      vi.useRealTimers();
+    });
+
     it("renders hardware wallet-specific error states from props", () => {
       const { rerender } = render(
         <ConnectWalletModal isOpen={true} onClose={onClose} errorState="device-locked-error" />

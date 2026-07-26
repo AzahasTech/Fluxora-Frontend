@@ -438,7 +438,6 @@ const location = useLocation();
                 Connect Wallet
               </Link>
             )}
-
           </div>
 
           {/* Easy-read font toggle */}
