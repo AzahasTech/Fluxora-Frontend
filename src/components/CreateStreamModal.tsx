@@ -1598,6 +1598,12 @@ export default function CreateStreamModal({
                         if (error) setError(null);
                       }}
                       onBlur={() => handleBlur('depositAmount')}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleNext();
+                        }
+                      }}
                       placeholder={t("createStream.step1.depositPlaceholder")}
                     />
                   </InputField>
@@ -1892,10 +1898,17 @@ export default function CreateStreamModal({
                   value={accrualRate}
                   onChange={(e) => setAccrualRate(e.target.value)}
                   onBlur={() => handleBlur('accrualRate')}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      document.getElementById('create-stream-duration')?.focus();
+                    }
+                  }}
                   placeholder="0.00"
                   hasError={Boolean(accrualRateError)}
                   aria-required="true"
                   aria-describedby={accrualRateError ? 'create-stream-accrual-rate-error' : 'create-stream-accrual-rate-hint'}
+                  keyboardHint="Enter ↵"
                 />
               </div>
               {accrualRateError && (
@@ -1945,10 +1958,17 @@ export default function CreateStreamModal({
                   value={duration}
                   onChange={(e) => setDuration(e.target.value)}
                   onBlur={() => handleBlur('duration')}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleNext();
+                    }
+                  }}
                   placeholder="1"
                   hasError={Boolean(durationError)}
                   aria-required="true"
                   aria-describedby={durationError ? 'create-stream-duration-error' : 'create-stream-duration-hint'}
+                  keyboardHint="Enter ↵"
                 />
               </div>
               {durationError && (
@@ -2569,6 +2589,12 @@ export default function CreateStreamModal({
                               if (error) setError(null);
                             }}
                             onBlur={() => handleBlur('depositAmount')}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleNext();
+                              }
+                            }}
                             placeholder={t("createStream.step1.depositPlaceholder")}
                           />
                         </InputField>
@@ -2847,10 +2873,17 @@ export default function CreateStreamModal({
                               value={accrualRate}
                               onChange={(e) => setAccrualRate(e.target.value)}
                               onBlur={() => handleBlur('accrualRate')}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  document.getElementById('advanced-duration')?.focus();
+                                }
+                              }}
                               placeholder="0.00"
                               hasError={Boolean(accrualRateError)}
                               aria-required="true"
                               aria-describedby={accrualRateError ? 'advanced-accrual-rate-error' : 'advanced-accrual-rate-hint'}
+                              keyboardHint="Enter ↵"
                             />
                           </div>
                           {accrualRateError && (
@@ -2895,10 +2928,17 @@ export default function CreateStreamModal({
                               value={duration}
                               onChange={(e) => setDuration(e.target.value)}
                               onBlur={() => handleBlur('duration')}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleNext();
+                                }
+                              }}
                               placeholder="1"
                               hasError={Boolean(durationError)}
                               aria-required="true"
                               aria-describedby={durationError ? 'advanced-duration-error' : 'advanced-duration-hint'}
+                              keyboardHint="Enter ↵"
                             />
                           </div>
                           {durationError && (
