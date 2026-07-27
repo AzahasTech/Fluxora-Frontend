@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { VoiceConfirmModal } from "../VoiceConfirmModal";
 import { VoiceContextValue, VoiceState, VoiceCommandDef } from "../voiceTypes";
 
@@ -116,12 +117,12 @@ describe("VoiceConfirmModal", () => {
       cancelDestructiveAction: cancelFn,
     });
     const { unmount } = render(<VoiceConfirmModal />);
-    // First Escape while mounted — should fire
+    // First Escape while mounted ï¿½ should fire
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     expect(cancelFn).toHaveBeenCalledTimes(1);
 
     unmount();
-    // Second Escape after unmount — should not fire
+    // Second Escape after unmount ï¿½ should not fire
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     expect(cancelFn).toHaveBeenCalledTimes(1);
   });
@@ -150,5 +151,43 @@ describe("VoiceConfirmModal", () => {
     render(<VoiceConfirmModal />);
     screen.getByText("Cancel").click();
     expect(cancelFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("wraps focus between the dialog actions when tabbing forward and backward", async () => {
+    const user = userEvent.setup();
+    mockContext = buildContext({
+      state: "confirming-destructive",
+      pendingDestructiveCommand: destructiveCmd,
+    });
+
+    render(<VoiceConfirmModal />);
+
+    const dialog = screen.getByRole("dialog");
+    const closeButton = screen.getByRole("button", { name: /cancel destructive action/i });
+    const confirmButton = screen.getByRole("button", { name: /confirm action/i });
+    const cancelButton = screen.getByRole("button", { name: /^Cancel$/i });
+
+    closeButton.focus();
+    expect(closeButton).toHaveFocus();
+
+    await user.tab();
+    expect(confirmButton).toHaveFocus();
+
+    await user.tab();
+    expect(cancelButton).toHaveFocus();
+
+    await user.tab();
+    expect(closeButton).toHaveFocus();
+
+    await user.tab({ shift: true });
+    expect(cancelButton).toHaveFocus();
+
+    await user.tab({ shift: true });
+    expect(confirmButton).toHaveFocus();
+
+    await user.tab({ shift: true });
+    expect(closeButton).toHaveFocus();
+
+    expect(dialog).toContainElement(document.activeElement);
   });
 });
