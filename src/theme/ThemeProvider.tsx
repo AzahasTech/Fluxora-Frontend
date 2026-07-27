@@ -68,11 +68,24 @@ function getSystemTheme(): Theme {
 }
 
 /**
- * Computes the theme to use on first paint: an explicit stored choice wins,
- * otherwise we follow the OS preference.
+ * Reads the theme snapshot already applied to the document root, if present.
+ *
+ * This is the deterministic source of truth for the initial render after
+ * {@link initTheme} has run, even if storage changes before React mounts.
+ */
+function getDocumentTheme(): Theme | null {
+  if (typeof document === "undefined") return null;
+  const theme = document.documentElement.getAttribute("data-theme");
+  return isTheme(theme) ? theme : null;
+}
+
+/**
+ * Computes the theme to use on first paint. The document snapshot wins when it
+ * is already present, otherwise a persisted choice is used, and finally the
+ * OS preference is used as the fallback.
  */
 export function resolveInitialTheme(): Theme {
-  return getStoredTheme() ?? getSystemTheme();
+  return getDocumentTheme() ?? getStoredTheme() ?? getSystemTheme();
 }
 
 /**
