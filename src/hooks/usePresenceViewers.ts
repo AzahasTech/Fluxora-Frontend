@@ -28,7 +28,7 @@ export interface Viewer {
  * - `presenceStatus`: Current availability state for the presence feature.
  */
 export function usePresenceViewers(
-  _streamId?: string,
+  streamId?: string,
   __devMockViewers: Viewer[] = []
 ) {
   const hasRealPresenceTransport = false;
@@ -91,13 +91,11 @@ export function usePresenceViewers(
 
   const viewerCount = viewers.filter(v => !v.fadingOut).length;
 
-  // Support both tuple [viewers, markActive, viewerCount] and object destructuring { viewers, markActive, viewerCount }
-  const result = [viewers, markActive, viewerCount] as any;
-  result.viewers = viewers;
-  result.markActive = markActive;
-  result.viewerCount = viewerCount;
-  result.isPresenceEnabled = isPresenceEnabled;
-  result.presenceStatus = presenceStatus;
-
-  return result;
+  return {
+    viewers,
+    markActive,
+    viewerCount,
+    isPresenceEnabled,
+    presenceStatus,
+  };
 }

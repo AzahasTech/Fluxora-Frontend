@@ -133,13 +133,15 @@ export function createAccessibleWidgetContainer(
   
   // Ensure proper focus styling
   element.style.outline = 'none';
-  element.addEventListener('focus', () => {
+  const handleFocus = () => {
     element.style.outline = '2px solid var(--interactive-focus-ring, #007acc)';
     element.style.outlineOffset = '2px';
-  });
-  element.addEventListener('blur', () => {
+  };
+  const handleBlur = () => {
     element.style.outline = 'none';
-  });
+  };
+  element.addEventListener('focus', handleFocus);
+  element.addEventListener('blur', handleBlur);
   
   // Return cleanup function
   return () => {
@@ -168,9 +170,9 @@ export function createAccessibleWidgetContainer(
       element.removeAttribute('tabindex');
     }
     
-    // Remove event listeners
-    element.removeEventListener('focus', () => {});
-    element.removeEventListener('blur', () => {});
+    // Remove event listeners with the same references
+    element.removeEventListener('focus', handleFocus);
+    element.removeEventListener('blur', handleBlur);
     element.style.outline = '';
   };
 }

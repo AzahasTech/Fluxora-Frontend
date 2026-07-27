@@ -406,7 +406,7 @@ const location = useLocation();
               aria-label="Toggle easy-read font"
               aria-pressed={easyReadFont}
               title={easyReadFont ? "Disable easy-read font" : "Enable easy-read font"}
-              className={`flex items-center justify-center min-h-[44px] min-w-[44px] rounded-full border transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${
+              className={`flex items-center justify-center min-h-[44px] min-w-[44px] px-2 rounded-full border transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${
                 easyReadFont
                   ? "border-[var(--accent)] text-[var(--accent)] bg-[var(--surface-elevated)]"
                   : "border-[var(--navbar-icon-border)] text-[var(--navbar-icon-color)] hover:border-[var(--accent)]/50 hover:text-[var(--accent)]"
@@ -519,7 +519,7 @@ const location = useLocation();
               aria-label="Toggle easy-read font"
               aria-pressed={easyReadFont}
               title={easyReadFont ? "Disable easy-read font" : "Enable easy-read font"}
-              className={`flex items-center justify-center min-h-[44px] min-w-[44px] rounded-full border transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${
+              className={`flex items-center justify-center min-h-[44px] min-w-[44px] px-2 rounded-full border transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${
                 easyReadFont
                   ? "border-[var(--accent)] text-[var(--accent)] bg-[var(--surface-elevated)]"
                   : "border-[var(--navbar-icon-border)] text-[var(--navbar-icon-color)] hover:border-[var(--accent)]/50 hover:text-[var(--accent)]"

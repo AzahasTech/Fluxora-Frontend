@@ -137,8 +137,8 @@ export function applyThemeConfigSafely(config: ThemeConfig): () => void {
       } else {
         html.style.removeProperty("--color-accent-primary");
       }
-      
-      // Restore original interactive focus ring
+
+      // Restore original focus ring
       if (originalFocusRing) {
         html.style.setProperty("--interactive-focus-ring", originalFocusRing);
       } else {

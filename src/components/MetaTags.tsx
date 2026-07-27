@@ -7,10 +7,10 @@ import type { StreamRecord } from '../data/streamRecords';
  * Uses a dynamic image URL that points to the server-generated OG image.
  */
 export const MetaTags: React.FC<{ stream: StreamRecord }> = ({ stream }) => {
-  const parsedUpdatedAt = stream.updatedAt ? Date.parse(stream.updatedAt) : Number.NaN;
-  const hasValidUpdatedAt = Number.isFinite(parsedUpdatedAt);
-  const ogImageUrl = hasValidUpdatedAt
-    ? `https://fluxora.app/og-image/${stream.id}.png?v=${parsedUpdatedAt}`
+  const parsedEndDate = stream.endDate ? Date.parse(stream.endDate) : Number.NaN;
+  const hasValidEndDate = Number.isFinite(parsedEndDate);
+  const ogImageUrl = hasValidEndDate
+    ? `https://fluxora.app/og-image/${stream.id}.png?v=${parsedEndDate}`
     : `https://fluxora.app/og-image/${stream.id}.png`;
   const ogTitle = `${stream.name} – Fluxora`;
   const ogDescription = stream.summary ?? 'Stream treasury capital on Stellar';
