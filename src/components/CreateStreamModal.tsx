@@ -338,9 +338,14 @@ export default function CreateStreamModal({
                 ? t("createStream.button.next")
                 : t("createStream.button.create");
 
+  const guardedClose = useCallback(() => {
+    if (isActivelySubmitting) return;
+    onClose();
+  }, [isActivelySubmitting, onClose]);
+
   useModalAccessibility({
     isOpen,
-    onClose,
+    onClose: guardedClose,
     modalRef,
     initialFocusRef: recipientInputRef,
   });
@@ -3191,6 +3196,9 @@ export default function CreateStreamModal({
                 disabled={isBusyCreating}
                 aria-busy={isBusyCreating}
               >
+                {isBusyCreating && (
+                  <span className="btn-spinner" aria-hidden="true" data-testid="btn-spinner" />
+                )}
                 {t("createStream.advanced.createBtn")}
               </button>
             </>
@@ -3230,6 +3238,9 @@ export default function CreateStreamModal({
                 disabled={isBusyCreating}
                 aria-busy={isBusyCreating && currentStep === 3}
               >
+                {(isBusyCreating && currentStep === 3) && (
+                  <span className="btn-spinner" aria-hidden="true" data-testid="btn-spinner" />
+                )}
                 {submitButtonLabel}
               </button>
             </>
