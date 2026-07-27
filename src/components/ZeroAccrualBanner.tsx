@@ -24,6 +24,7 @@
 import "./zero-accrual-banner.css";
 import { formatLocalDate } from "../lib/formatters";
 
+// ── Helpers ───────────────────────────────────────────────────────────
 
 export type ZeroAccrualReason =
   | "cliff"         // Cliff date hasn't passed yet
@@ -153,6 +154,13 @@ export default function ZeroAccrualBanner({
 }: ZeroAccrualBannerProps) {
   const cfg = REASON_CONFIG[reason];
   const label = actionLabel ?? cfg.defaultActionLabel;
+  const formattedEventDate = nextEventDate
+    ? formatLocalDate(nextEventDate, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    : null;
 
   return (
     <div
@@ -172,15 +180,11 @@ export default function ZeroAccrualBanner({
         <p className="zero-accrual-banner__description">{cfg.description}</p>
 
         {/* Next event date chip */}
-        {nextEventDate && (
+        {formattedEventDate && (
           <span className="zero-accrual-banner__next-event">
             <CalendarIcon />
             {nextEventLabel(reason)}:{" "}
-            {formatLocalDate(nextEventDate, {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-            })}
+            {formattedEventDate}
           </span>
         )}
       </div>
