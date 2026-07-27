@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { axe } from "vitest-axe";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +13,15 @@ function renderHome() {
       </MemoryRouter>
     </ThemeProvider>,
   );
+}
+
+function setViewportWidth(width: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    writable: true,
+    value: width,
+  });
+  window.dispatchEvent(new Event("resize"));
 }
 
 describe("Home canonical landing page", () => {
@@ -48,6 +57,48 @@ describe("Home canonical landing page", () => {
         name: /stay updated on stellar ecosystem streaming/i,
       }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("Home responsive viewport behavior", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+  });
+
+  it("tracks mobile and desktop layout decisions with debounced viewport changes", () => {
+    setViewportWidth(1280);
+    renderHome();
+
+    expect(screen.getByRole("main")).toHaveAttribute("data-mobile-layout", "desktop");
+
+    setViewportWidth(375);
+    expect(screen.getByRole("main")).toHaveAttribute("data-mobile-layout", "desktop");
+
+    act(() => {
+      vi.advanceTimersByTime(149);
+    });
+    expect(screen.getByRole("main")).toHaveAttribute("data-mobile-layout", "desktop");
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.getByRole("main")).toHaveAttribute("data-mobile-layout", "mobile");
+
+    setViewportWidth(1280);
+    act(() => {
+      vi.advanceTimersByTime(149);
+    });
+    expect(screen.getByRole("main")).toHaveAttribute("data-mobile-layout", "mobile");
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.getByRole("main")).toHaveAttribute("data-mobile-layout", "desktop");
   });
 });
 
