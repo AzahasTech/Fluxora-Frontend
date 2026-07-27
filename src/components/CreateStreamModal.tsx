@@ -1241,7 +1241,7 @@ export default function CreateStreamModal({
             type="button"
             className="close-button"
             onClick={handleClose}
-            disabled={isBusyCreating || isBulkSubmitting}
+            disabled={isActivelySubmitting || isBulkSubmitting}
             aria-label={t("createStream.accessibility.closeLabel")}
           >
             <svg
