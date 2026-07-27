@@ -18,6 +18,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { VoiceMicButton } from "../VoiceMicButton";
 import * as VoiceContextModule from "../VoiceContext";
 import type { VoiceContextValue, VoiceState } from "../voiceTypes";
@@ -177,7 +178,7 @@ describe("VoiceMicButton — sidebar variant", () => {
     const toggleListening = vi.fn();
     mockUseVoiceContext(buildCtx({ state: "idle", toggleListening }));
     render(<VoiceMicButton variant="sidebar" />);
-    fireEvent.click(screen.getByRole("button"));
+    fireEvent.click(screen.getByRole("button", { name: /enable voice commands/i }));
     expect(toggleListening).toHaveBeenCalledOnce();
   });
 
@@ -196,7 +197,9 @@ describe("VoiceMicButton — sidebar variant", () => {
   it("renders panel toggle button with correct label", () => {
     mockUseVoiceContext(buildCtx({ state: "idle", panelOpen: false }));
     render(<VoiceMicButton variant="sidebar" />);
-    const panelBtn = screen.getByTitle("Toggle Voice Command Reference");
+    const panelBtn = screen.getByRole("button", {
+      name: /toggle voice command reference/i,
+    });
     expect(panelBtn).toBeInTheDocument();
     expect(panelBtn).toHaveTextContent("Help");
   });
@@ -205,7 +208,24 @@ describe("VoiceMicButton — sidebar variant", () => {
     const togglePanel = vi.fn();
     mockUseVoiceContext(buildCtx({ state: "idle", togglePanel }));
     render(<VoiceMicButton variant="sidebar" />);
-    fireEvent.click(screen.getByTitle("Toggle Voice Command Reference"));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /toggle voice command reference/i,
+      }),
+    );
+    expect(togglePanel).toHaveBeenCalledOnce();
+  });
+
+  it("panel toggle button is keyboard focusable and activates togglePanel with Enter", async () => {
+    const togglePanel = vi.fn();
+    mockUseVoiceContext(buildCtx({ state: "idle", togglePanel }));
+    render(<VoiceMicButton variant="sidebar" />);
+    const panelBtn = screen.getByRole("button", {
+      name: /toggle voice command reference/i,
+    });
+    panelBtn.focus();
+    expect(panelBtn).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
     expect(togglePanel).toHaveBeenCalledOnce();
   });
 
@@ -218,20 +238,28 @@ describe("VoiceMicButton — sidebar variant", () => {
   it("is disabled when unsupported", () => {
     mockUseVoiceContext(buildCtx({ state: "unsupported-browser", isSupported: false }));
     render(<VoiceMicButton variant="sidebar" />);
-    expect(screen.getByRole("button")).toBeDisabled();
+    expect(
+      screen.getByRole("button", {
+        name: /voice control unsupported by browser/i,
+      }),
+    ).toBeDisabled();
   });
 
   it("renders danger background when permission denied", () => {
     mockUseVoiceContext(buildCtx({ state: "permission-denied" }));
     render(<VoiceMicButton variant="sidebar" />);
-    const btn = screen.getByRole("button");
+    const btn = screen.getByRole("button", {
+      name: /microphone access blocked/i,
+    });
     expect(btn.className).toMatch(/bg-red-500\/10/);
   });
 
   it("renders accent background when listening", () => {
     mockUseVoiceContext(buildCtx({ state: "listening" }));
     render(<VoiceMicButton variant="sidebar" />);
-    const btn = screen.getByRole("button");
+    const btn = screen.getByRole("button", {
+      name: /listening/i,
+    });
     expect(btn.className).toMatch(/bg-\[var\(--color-accent-primary\)\]/);
   });
 
