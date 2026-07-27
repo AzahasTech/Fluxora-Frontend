@@ -2,10 +2,47 @@ import "./ToastNotification.css";
 
 export type ToastVariant = "success" | "error" | "info" | "warning";
 
+export type StreamStatusMilestone = "cliff-passed" | "fully-accrued" | "new-stream";
+
+export interface StreamStatusNotificationContent {
+  title: string;
+  body: string;
+  icon: string;
+}
+
+/** Shared content contract for future browser notifications and in-app copy. */
+export function getStreamStatusNotificationContent(
+  milestone: StreamStatusMilestone,
+  streamLabel = "your stream",
+): StreamStatusNotificationContent {
+  const copy: Record<StreamStatusMilestone, Omit<StreamStatusNotificationContent, "body"> & { body: string }> = {
+    "cliff-passed": {
+      title: "Cliff passed",
+      body: `The cliff for ${streamLabel} has passed. Accrual is now available.`,
+      icon: "/fluxora-notification-icon.svg",
+    },
+    "fully-accrued": {
+      title: "Stream fully accrued",
+      body: `${streamLabel} is fully accrued and ready to withdraw.`,
+      icon: "/fluxora-notification-icon.svg",
+    },
+    "new-stream": {
+      title: "New stream received",
+      body: `You have received ${streamLabel} in Fluxora.`,
+      icon: "/fluxora-notification-icon.svg",
+    },
+  };
+
+  return copy[milestone];
+}
+
 interface ToastNotificationProps {
   message: string;
   variant: ToastVariant;
   onClose: () => void;
+  /** Optional inline action (e.g. "View stream"). Rendered only when both are set. */
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 const TOAST_COPY: Record<ToastVariant, { label: string; icon: string }> = {
@@ -15,22 +52,52 @@ const TOAST_COPY: Record<ToastVariant, { label: string; icon: string }> = {
   warning: { label: "Warning", icon: "⚠" },
 };
 
+/**
+ * Maps each toast variant to its ARIA live-region semantics.
+ *
+ * - `error` / `warning` → `role="alert"` + `aria-live="assertive"` so screen
+ *   readers interrupt the current announcement immediately.
+ * - `success` / `info`  → `role="status"` + `aria-live="polite"` for non-urgent
+ *   updates that wait for a natural pause.
+ * - Unknown variants default to `assertive` alert semantics as the fail-safe
+ *   choice: it is safer to over-announce an unexpected toast than to silently
+ *   miss a potentially critical message.
+ */
+const VARIANT_SEMANTICS: Record<
+  ToastVariant,
+  { role: "alert" | "status"; "aria-live": "assertive" | "polite" }
+> = {
+  error: { role: "alert", "aria-live": "assertive" },
+  warning: { role: "alert", "aria-live": "assertive" },
+  success: { role: "status", "aria-live": "polite" },
+  info: { role: "status", "aria-live": "polite" },
+};
+
+/** Fail-safe semantics used when a variant is not in {@link VARIANT_SEMANTICS}. */
+const FALLBACK_SEMANTICS = {
+  role: "alert" as const,
+  "aria-live": "assertive" as const,
+};
+
+const FALLBACK_COPY = { label: "Alert", icon: "!" };
+
 export default function ToastNotification({
   message,
   variant,
   onClose,
+  actionLabel,
+  onAction,
 }: ToastNotificationProps) {
-  const semantics =
-    variant === "error" || variant === "warning"
-      ? { role: "alert" as const, "aria-live": "assertive" as const }
-      : { role: "status" as const, "aria-live": "polite" as const };
+  const semantics = VARIANT_SEMANTICS[variant] ?? FALLBACK_SEMANTICS;
 
-  const { label, icon } = TOAST_COPY[variant];
+  const { label, icon } = TOAST_COPY[variant] ?? FALLBACK_COPY;
 
   return (
     <div
       className={`toast-notification toast-notification--${variant}`}
       aria-atomic="true"
+      aria-label={`${label} notification`}
+      data-variant={variant}
       {...semantics}
     >
       <div className="toast-notification__icon" aria-hidden="true">
@@ -39,6 +106,18 @@ export default function ToastNotification({
       <div className="toast-notification__content">
         <p className="toast-notification__eyebrow">{label}</p>
         <p className="toast-notification__message">{message}</p>
+        {actionLabel && onAction && (
+          <button
+            type="button"
+            className="toast-notification__action"
+            onClick={() => {
+              onAction();
+              onClose();
+            }}
+          >
+            {actionLabel}
+          </button>
+        )}
       </div>
       <button
         type="button"
