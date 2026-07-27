@@ -7,6 +7,19 @@ import {
   useState,
   type ReactNode,
 } from "react";
+
+const TOAST_SOUND_STORAGE_KEY = "toast-sound";
+const TOAST_SOUND_ENABLED = "enabled";
+
+function readSoundPreference(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const storedValue = window.localStorage.getItem(TOAST_SOUND_STORAGE_KEY);
+    return storedValue === TOAST_SOUND_ENABLED;
+  } catch {
+    return false;
+  }
+}
 import ToastNotification from "../ToastNotification";
 import type { ToastVariant } from "../ToastNotification";
 
@@ -54,6 +67,7 @@ const DEFAULT_TIMEOUT = 4000;
  */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [soundEnabled, setSoundEnabled] = useState(readSoundPreference);
   const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const dismiss = useCallback((id: string) => {
@@ -111,10 +125,32 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const toggleSound = useCallback(() => {
+    setSoundEnabled((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(TOAST_SOUND_STORAGE_KEY, next ? TOAST_SOUND_ENABLED : "disabled");
+      } catch {
+        // Ignore storage failures and still update in-memory state.
+      }
+      return next;
+    });
+  }, []);
+
   return (
     <ToastContext.Provider value={{ addToast, dismiss }}>
       {children}
       <div className="toast-stack" aria-label="Notifications">
+        <button
+          type="button"
+          onClick={toggleSound}
+          aria-label={soundEnabled ? "Mute sound alerts" : "Enable sound alerts"}
+        >
+          {soundEnabled ? "Mute sound alerts" : "Enable sound alerts"}
+        </button>
+        <p className="toast-sound-status">
+          {soundEnabled ? "Sound alerts are enabled." : "Sound alerts are off by default."}
+        </p>
         {overflow > 0 && (
           <div className="toast-stack__overflow" aria-live="polite">
             +{overflow} more notification{overflow > 1 ? "s" : ""}
