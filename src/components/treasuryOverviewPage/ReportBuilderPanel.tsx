@@ -31,7 +31,15 @@ export default function ReportBuilderPanel({ streams, onClose }: ReportBuilderPa
   const [dateError, setDateError] = useState("");
   const [exportError, setExportError] = useState(false);
   const { addToast } = useToast();
-  const panelRef = useRef<HTMLDivElement>(null);
+  const mountedRef = useRef(true);
+
+  // Track mounted state for safe async state updates
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const handleFieldToggle = useCallback((field: Field) => {
     setSelectedFields((prev) => {
@@ -42,20 +50,14 @@ export default function ReportBuilderPanel({ streams, onClose }: ReportBuilderPa
     });
   }, []);
 
-  // Validate date range
-  useEffect(() => {
-    if (startDate && endDate && endDate < startDate) {
-      setDateError("End date must be on or after the start date.");
-    } else {
-      setDateError("");
-    }
-  }, [startDate, endDate]);
-
-  // Preview loading indicator
+  // Deterministic preview loading: triggered on filter change, resolved
+  // at the next animation frame so the DOM can paint the loading overlay.
   useEffect(() => {
     setIsPreviewLoading(true);
     const rafId = requestAnimationFrame(() => {
-      setIsPreviewLoading(false);
+      if (mountedRef.current) {
+        setIsPreviewLoading(false);
+      }
     });
     return () => cancelAnimationFrame(rafId);
   }, [startDate, endDate, selectedFields, grouping]);
@@ -105,7 +107,9 @@ export default function ReportBuilderPanel({ streams, onClose }: ReportBuilderPa
       setExportError(true);
       addToast("Failed to export report. Please try again.", "error");
     } finally {
-      setIsExporting(false);
+      if (mountedRef.current) {
+        setIsExporting(false);
+      }
     }
   }, [canExport, exportFormat, reportStreams, orderedSelectedFields, grouping, addToast, onClose]);
 
