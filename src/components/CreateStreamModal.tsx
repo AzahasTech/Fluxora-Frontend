@@ -31,7 +31,11 @@ import ColumnMappingStep from './csv-upload/ColumnMappingStep';
 import PreviewValidateStep from './csv-upload/PreviewValidateStep';
 import { parseAndValidateCsv } from './csv-upload/csvParser';
 import type { CsvRow, ParseResult, ColumnMapping, BulkStep } from './csv-upload/types';
-import type { StreamDraftSnapshot } from '../lib/streamsSessionRecovery';
+import {
+  DEFAULT_STREAM_DRAFT_ACCRUAL_RATE,
+  DEFAULT_STREAM_DRAFT_DURATION,
+  type StreamDraftSnapshot,
+} from '../lib/streamsSessionRecovery';
 import {
   evaluateContrast,
   THEME_BACKGROUNDS,
@@ -207,8 +211,8 @@ export default function CreateStreamModal({
   // ── Single-stream state ───────────────────────────────────────────────────
   const [recipient, setRecipient] = useState("");
   const [depositAmount, setDepositAmount] = useState("");
-  const [accrualRate, setAccrualRate] = useState("38.62");
-  const [duration, setDuration] = useState("1");
+  const [accrualRate, setAccrualRate] = useState(DEFAULT_STREAM_DRAFT_ACCRUAL_RATE);
+  const [duration, setDuration] = useState(DEFAULT_STREAM_DRAFT_DURATION);
   const [startTimeOption, setStartTimeOption] = useState<"now" | "custom">(
     "now",
   );
