@@ -81,6 +81,7 @@ export default function ConnectWalletModal({
   const modalRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const customPathInputRef = useRef<HTMLInputElement>(null);
   
   // Track hovered/focused options in default view
   const [hoveredOptionId, setHoveredOptionId] = useState<string | null>(null);
@@ -139,6 +140,15 @@ export default function ConnectWalletModal({
       setPathError(null);
     }
   };
+
+  useEffect(() => {
+    if (derivationPath === "custom") {
+      const timer = setTimeout(() => {
+        customPathInputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [derivationPath]);
 
   // Simulate desktop scanning transition
   useEffect(() => {
@@ -835,6 +845,7 @@ export default function ConnectWalletModal({
                 <div>
                   <input
                     type="text"
+                    ref={customPathInputRef}
                     id="custom-derivation-path-input"
                     className={styles.customPathInput}
                     value={customPath}

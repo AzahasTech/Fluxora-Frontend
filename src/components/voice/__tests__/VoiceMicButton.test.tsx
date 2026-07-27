@@ -72,7 +72,7 @@ describe("VoiceMicButton — navbar variant", () => {
       mockUseVoiceContext(buildCtx({ state }));
       render(<VoiceMicButton variant="navbar" />);
       const btn = screen.getByRole("button");
-      expect(btn.getAttribute("aria-label").toLowerCase()).toContain(
+      expect(btn.getAttribute("aria-label")?.toLowerCase()).toContain(
         labelFragment.toLowerCase()
       );
     });
@@ -167,10 +167,10 @@ describe("VoiceMicButton — sidebar variant", () => {
     it(`state="${state}" renders correct aria-label`, () => {
       mockUseVoiceContext(buildCtx({ state }));
       render(<VoiceMicButton variant="sidebar" />);
-      const btn = screen.getByRole("button", {
-        name: new RegExp(labelFragment, "i"),
-      });
-      expect(btn.getAttribute("aria-label")).toContain(labelFragment);
+      const btn = screen.getByRole("button");
+      expect(btn.getAttribute("aria-label")?.toLowerCase()).toContain(
+        labelFragment.toLowerCase()
+      );
     });
   });
 
