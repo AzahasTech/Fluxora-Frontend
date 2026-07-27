@@ -4,7 +4,6 @@ import { axe } from "vitest-axe";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ONBOARDING_DISMISSED_STORAGE_KEY } from "../../lib/onboarding";
 import Dashboard from "../Dashboard";
-import * as treasuryModule from "../../components/treasuryOverviewPage/useTreasury";
 
 vi.mock("@stellar/freighter-api", () => ({
   isConnected: vi.fn(async () => ({ isConnected: false })),
