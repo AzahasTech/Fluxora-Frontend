@@ -219,5 +219,22 @@ describe('embedThemeParser', () => {
       expect(document.documentElement.getAttribute('data-theme')).toBeNull();
       expect(document.documentElement.style.getPropertyValue('--color-accent-primary')).toBe('');
     });
+
+    it('restores pre-existing --interactive-focus-ring value on cleanup', () => {
+      document.documentElement.style.setProperty('--interactive-focus-ring', '#ABCDEF');
+
+      const config: ThemeConfig = {
+        theme: null,
+        accentColor: '#FF0000'
+      };
+
+      const cleanup = applyThemeConfigSafely(config);
+
+      expect(document.documentElement.style.getPropertyValue('--interactive-focus-ring')).toBe('#FF0000');
+
+      cleanup();
+
+      expect(document.documentElement.style.getPropertyValue('--interactive-focus-ring')).toBe('#ABCDEF');
+    });
   });
 });
