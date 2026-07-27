@@ -45,8 +45,32 @@ describe("StreamDetail MetaTags Integration", () => {
       const twitterCard = document.querySelector('meta[name="twitter:card"]');
 
       expect(ogTitle?.getAttribute("content")).toBe("Dev Grant - Alice – Fluxora");
-      expect(ogImage?.getAttribute("content")).toContain("https://fluxora.app/og-image/STR-001.png");
+      expect(ogImage?.getAttribute("content")).toBe(
+        `${window.location.origin}/og-image/STR-001.png?v=0`,
+      );
       expect(twitterCard?.getAttribute("content")).toBe("summary_large_image");
+    });
+  });
+
+  it("uses the current runtime origin for generated og url/image values", async () => {
+    const helmetContext = {};
+
+    render(
+      <HelmetProvider context={helmetContext}>
+        <MetaTags stream={mockStream} />
+      </HelmetProvider>
+    );
+
+    await waitFor(() => {
+      const ogUrl = document.querySelector('meta[property="og:url"]');
+      const ogImage = document.querySelector('meta[property="og:image"]');
+
+      expect(ogUrl?.getAttribute("content")).toBe(
+        `${window.location.origin}/app/streams/STR-001`,
+      );
+      expect(ogImage?.getAttribute("content")).toContain(
+        `${window.location.origin}/og-image/STR-001.png`,
+      );
     });
   });
 
