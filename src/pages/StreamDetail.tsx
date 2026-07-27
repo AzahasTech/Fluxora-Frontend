@@ -30,7 +30,10 @@ import { PresenceBadge, PresenceCursorOverlay } from "../components/presence";
  * States:
  * - **loading**   – skeleton shimmer while the request is in-flight
  * - **not found** – friendly empty state with a link back to the list
- * - **error**     – error message with a retry button
+ * - **error**     – error message with a "Try again" button and a back link.
+ *                   The retry button re-issues the fetch without a full page
+ *                   navigation, keeping loading → error → loading transitions
+ *                   deterministic across refreshes and re-renders.
  * - **compare**   – two-pane split view
  * - **success**   – full single stream detail layout
  */
@@ -162,6 +165,25 @@ export default function StreamDetail() {
   }
 
   if (error) {
+    const handleRetry = () => {
+      if (!streamId) return;
+      setLoading(true);
+      setError(null);
+
+      const controller = new AbortController();
+      getStreamById(decodeURIComponent(streamId), controller.signal)
+        .then((result) => {
+          setStream(result);
+          setLoading(false);
+        })
+        .catch((err: unknown) => {
+          setError(
+            err instanceof Error ? err.message : "Failed to load stream.",
+          );
+          setLoading(false);
+        });
+    };
+
     return (
       <div data-testid="stream-detail-page" style={{ padding: "1.5rem" }}>
         <Breadcrumb items={[{ label: "Streams", to: "/app/streams" }]} />
@@ -177,12 +199,33 @@ export default function StreamDetail() {
         >
           <strong>Error loading stream:</strong> {error}
         </div>
-        <Link
-          to="/app/streams"
-          style={{ display: "inline-block", marginTop: "1rem" }}
-        >
-          ← Back to streams
-        </Link>
+        <div style={{ marginTop: "1rem", display: "flex", gap: "0.75rem" }}>
+          <button
+            onClick={handleRetry}
+            style={{
+              padding: "0.5rem 1rem",
+              borderRadius: "6px",
+              border: "1px solid var(--color-border, #e5e7eb)",
+              background: "var(--color-surface-1, #fff)",
+              color: "var(--color-text-primary, #111827)",
+              cursor: "pointer",
+              fontWeight: 500,
+            }}
+          >
+            Try again
+          </button>
+          <Link
+            to="/app/streams"
+            style={{
+              display: "inline-block",
+              padding: "0.5rem 1rem",
+              textDecoration: "none",
+              color: "var(--color-text-secondary, #6b7280)",
+            }}
+          >
+            ← Back to streams
+          </Link>
+        </div>
       </div>
     );
   }
