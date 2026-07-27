@@ -57,6 +57,8 @@ export default function StreamCreatedModal({
   if (!isOpen) return null;
 
   const handleShareOrCopy = async () => {
+    if (status === "sharing") return;
+
     if (support.share) {
       const outcome = await share({
         title: "Stream created",
@@ -180,7 +182,9 @@ export default function StreamCreatedModal({
               className={`${styles.copyButton} ${(status === "copied" || status === "shared") ? styles.copied : ""}`}
               onClick={() => void handleShareOrCopy()}
               type="button"
-              aria-label={`${support.share ? "Share" : "Copy"} stream URL`}
+              disabled={status === "sharing"}
+              aria-busy={status === "sharing"}
+              aria-label={`${status === "sharing" ? "Sharing" : (status === "copied" || status === "shared") ? "Copied" : support.share ? "Share" : "Copy"} stream URL`}
             >
               {(status === "copied" || status === "shared") ? (
                 <svg
@@ -194,6 +198,20 @@ export default function StreamCreatedModal({
                   strokeLinejoin="round"
                 >
                   <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              ) : status === "sharing" ? (
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={styles.spinning}
+                >
+                  <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="10"></circle>
                 </svg>
               ) : support.share ? (
                 <svg
