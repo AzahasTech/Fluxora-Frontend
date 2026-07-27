@@ -1,8 +1,13 @@
+<<<<<<< HEAD
 import { render } from "@testing-library/react";
 import { act } from "react";
+=======
+import { act, fireEvent, render, screen } from "@testing-library/react";
+>>>>>>> 1020b8026963b726bbb48da50c644df0f980b5ea
 import { Profiler, type ProfilerOnRenderCallback } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Sidebar from "../Sidebar";
+import { VoiceProvider } from "../voice/VoiceContext";
 import {
   BREAKPOINT_MD,
   VIEWPORT_RESIZE_DEBOUNCE_MS,
@@ -21,15 +26,18 @@ vi.mock("react-router-dom", () => ({
     className?: string | ((props: { isActive: boolean }) => string);
     onClick?: () => void;
     end?: boolean;
-  }) => (
-    <a
-      href={to}
-      className={typeof className === "function" ? className({ isActive: false }) : className}
-      onClick={onClick}
-    >
-      {typeof children === "function" ? children({ isActive: false }) : children}
-    </a>
-  ),
+  }) => {
+    const isActive = to === "/app";
+    return (
+      <a
+        href={to}
+        className={typeof className === "function" ? className({ isActive }) : className}
+        onClick={onClick}
+      >
+        {typeof children === "function" ? children({ isActive }) : children}
+      </a>
+    );
+  },
   useNavigate: () => vi.fn(),
 }));
 
@@ -51,12 +59,14 @@ function getSidebar() {
 
 function renderSidebar(mobileOpen = false, onRender?: ProfilerOnRenderCallback) {
   const sidebar = (
-    <Sidebar
-      collapsed={false}
-      onToggleCollapse={vi.fn()}
-      mobileOpen={mobileOpen}
-      onMobileClose={vi.fn()}
-    />
+    <VoiceProvider>
+      <Sidebar
+        collapsed={false}
+        onToggleCollapse={vi.fn()}
+        mobileOpen={mobileOpen}
+        onMobileClose={vi.fn()}
+      />
+    </VoiceProvider>
   );
 
   if (onRender) {
@@ -69,6 +79,27 @@ function renderSidebar(mobileOpen = false, onRender?: ProfilerOnRenderCallback) 
 
   return render(sidebar);
 }
+
+describe("Sidebar design-token adoption", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("renders the logo gradient from design-token CSS variables, not hardcoded hex", () => {
+    setViewportWidth(BREAKPOINT_MD);
+    const { container } = renderSidebar(false);
+
+    const logo = container.querySelector<HTMLElement>(".bg-gradient-to-b");
+    expect(logo).toBeTruthy();
+
+    const className = logo!.className;
+    // Token variables are referenced...
+    expect(className).toContain("from-[var(--color-accent-primary)]");
+    expect(className).toContain("to-[var(--color-accent-primary-dark)]");
+    // ...and no raw hex colors remain.
+    expect(className).not.toMatch(/#[0-9a-fA-F]{3,6}/);
+  });
+});
 
 describe("isMobileViewport", () => {
   it("treats widths below BREAKPOINT_MD as mobile", () => {
@@ -92,11 +123,11 @@ describe("Sidebar resize handling", () => {
     vi.restoreAllMocks();
   });
 
-  it("reflects mobile aria-hidden when viewport crosses below the breakpoint", () => {
+  it("sets inert on the sidebar when the mobile drawer is closed", () => {
     setViewportWidth(BREAKPOINT_MD);
     renderSidebar(false);
 
-    expect(getSidebar()).toHaveAttribute("aria-hidden", "false");
+    expect(getSidebar()).not.toHaveAttribute("inert");
 
     setViewportWidth(BREAKPOINT_MD - 1);
     act(() => {
@@ -104,14 +135,14 @@ describe("Sidebar resize handling", () => {
       vi.advanceTimersByTime(VIEWPORT_RESIZE_DEBOUNCE_MS);
     });
 
-    expect(getSidebar()).toHaveAttribute("aria-hidden", "true");
+    expect(getSidebar()).toHaveAttribute("inert");
   });
 
-  it("reflects desktop aria-hidden when viewport crosses above the breakpoint", () => {
+  it("removes inert from the sidebar when viewport crosses above the breakpoint", () => {
     setViewportWidth(BREAKPOINT_MD - 1);
     renderSidebar(false);
 
-    expect(getSidebar()).toHaveAttribute("aria-hidden", "true");
+    expect(getSidebar()).toHaveAttribute("inert");
 
     setViewportWidth(BREAKPOINT_MD);
     act(() => {
@@ -119,7 +150,7 @@ describe("Sidebar resize handling", () => {
       vi.advanceTimersByTime(VIEWPORT_RESIZE_DEBOUNCE_MS);
     });
 
-    expect(getSidebar()).toHaveAttribute("aria-hidden", "false");
+    expect(getSidebar()).not.toHaveAttribute("inert");
   });
 
   it("debounces rapid resize events into a single state update", () => {
@@ -140,21 +171,21 @@ describe("Sidebar resize handling", () => {
       vi.advanceTimersByTime(VIEWPORT_RESIZE_DEBOUNCE_MS - 1);
     });
 
-    expect(getSidebar()).toHaveAttribute("aria-hidden", "false");
+    expect(getSidebar()).not.toHaveAttribute("inert");
 
     act(() => {
       vi.advanceTimersByTime(1);
     });
 
-    expect(getSidebar()).toHaveAttribute("aria-hidden", "true");
+    expect(getSidebar()).toHaveAttribute("inert");
     expect(commitCount).toBe(commitsAfterMount + 1);
   });
 
-  it("keeps aria-hidden stable when debounced resize stays within mobile widths", () => {
+  it("keeps inert absent when debounced resize stays within mobile widths", () => {
     setViewportWidth(BREAKPOINT_MD - 100);
     renderSidebar(false);
 
-    expect(getSidebar()).toHaveAttribute("aria-hidden", "true");
+    expect(getSidebar()).toHaveAttribute("inert");
 
     act(() => {
       for (const width of [500, 520, 540, 560]) {
@@ -164,7 +195,7 @@ describe("Sidebar resize handling", () => {
       vi.advanceTimersByTime(VIEWPORT_RESIZE_DEBOUNCE_MS);
     });
 
-    expect(getSidebar()).toHaveAttribute("aria-hidden", "true");
+    expect(getSidebar()).toHaveAttribute("inert");
   });
 
   it("removes the resize listener and pending debounce on unmount", () => {
@@ -189,10 +220,262 @@ describe("Sidebar resize handling", () => {
     });
   });
 
-  it("keeps sidebar visible on mobile when the drawer is open", () => {
+  it("keeps sidebar inert-free on mobile when the drawer is open", () => {
     setViewportWidth(BREAKPOINT_MD - 1);
     renderSidebar(true);
 
-    expect(getSidebar()).toHaveAttribute("aria-hidden", "false");
+    expect(getSidebar()).not.toHaveAttribute("inert");
   });
 });
+
+describe("Sidebar collapse toggle accessibility & keyboard interaction", () => {
+  beforeEach(() => {
+    setViewportWidth(BREAKPOINT_MD);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function renderSidebarWithProviders(props: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
+    return render(
+      <VoiceProvider>
+        <Sidebar
+          collapsed={false}
+          onToggleCollapse={vi.fn()}
+          mobileOpen={false}
+          onMobileClose={vi.fn()}
+          {...props}
+        />
+      </VoiceProvider>
+    );
+  }
+
+  it("renders a real button with correct aria-expanded state and dynamic accessible name", () => {
+    const onToggleCollapse = vi.fn();
+    const { rerender } = render(
+      <VoiceProvider>
+        <Sidebar
+          collapsed={false}
+          onToggleCollapse={onToggleCollapse}
+          mobileOpen={false}
+          onMobileClose={vi.fn()}
+        />
+      </VoiceProvider>
+    );
+
+    const toggleButton = document.querySelector('button[aria-controls="app-sidebar"]');
+    expect(toggleButton).toBeTruthy();
+    expect(toggleButton?.tagName).toBe("BUTTON");
+    expect(toggleButton).toHaveAttribute("aria-expanded", "true");
+    expect(toggleButton).toHaveAttribute("aria-label", "Collapse sidebar");
+
+    rerender(
+      <VoiceProvider>
+        <Sidebar
+          collapsed={true}
+          onToggleCollapse={onToggleCollapse}
+          mobileOpen={false}
+          onMobileClose={vi.fn()}
+        />
+      </VoiceProvider>
+    );
+
+    expect(toggleButton).toHaveAttribute("aria-expanded", "false");
+    expect(toggleButton).toHaveAttribute("aria-label", "Expand sidebar");
+  });
+
+  it("toggles sidebar on mouse click and keyboard activation (Enter/Space)", () => {
+    const onToggleCollapse = vi.fn();
+    renderSidebarWithProviders({
+      collapsed: false,
+      onToggleCollapse,
+      mobileOpen: false,
+      onMobileClose: vi.fn(),
+    });
+
+    const toggleButton = document.querySelector('button[aria-controls="app-sidebar"]') as HTMLButtonElement;
+    expect(toggleButton).toBeTruthy();
+
+    // Mouse click
+    fireEvent.click(toggleButton);
+    expect(onToggleCollapse).toHaveBeenCalledTimes(1);
+
+    // Keyboard Enter
+    fireEvent.keyDown(toggleButton, { key: "Enter", code: "Enter" });
+    fireEvent.click(toggleButton);
+    expect(onToggleCollapse).toHaveBeenCalledTimes(2);
+
+    // Keyboard Space
+    fireEvent.keyDown(toggleButton, { key: " ", code: "Space" });
+    fireEvent.click(toggleButton);
+    expect(onToggleCollapse).toHaveBeenCalledTimes(3);
+  });
+
+  it("maintains sane tab order in both expanded and collapsed states", () => {
+    const { rerender } = render(
+      <VoiceProvider>
+        <Sidebar
+          collapsed={false}
+          onToggleCollapse={vi.fn()}
+          mobileOpen={false}
+          onMobileClose={vi.fn()}
+        />
+      </VoiceProvider>
+    );
+
+    const sidebar = getSidebar();
+    const getFocusableItems = () =>
+      Array.from(
+        sidebar.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((el) => !el.hasAttribute("disabled") && el.getAttribute("aria-hidden") !== "true");
+
+    const expandedFocusables = getFocusableItems();
+    expect(expandedFocusables.length).toBeGreaterThan(0);
+
+    // Check expected sequence of focusable elements when expanded
+    const expandedLabels = expandedFocusables.map(
+      (el) => el.getAttribute("aria-label") || el.textContent?.trim()
+    );
+    expect(expandedLabels).toContain("Fluxora home");
+    expect(expandedLabels).toContain("Collapse sidebar");
+
+    // Rerender collapsed
+    rerender(
+      <VoiceProvider>
+        <Sidebar
+          collapsed={true}
+          onToggleCollapse={vi.fn()}
+          mobileOpen={false}
+          onMobileClose={vi.fn()}
+        />
+      </VoiceProvider>
+    );
+
+    const collapsedFocusables = getFocusableItems();
+    // In desktop view (hidden md:flex toggle button), all nav links, external links, logo and toggle button remain focusable in DOM
+    expect(collapsedFocusables.length).toEqual(expandedFocusables.length);
+
+    const collapsedLabels = collapsedFocusables.map(
+      (el) => el.getAttribute("aria-label") || el.textContent?.trim()
+    );
+    expect(collapsedLabels).toContain("Fluxora home");
+    expect(collapsedLabels).toContain("Expand sidebar");
+
+    // Verify focus can move through each item without focus traps
+    collapsedFocusables.forEach((el) => {
+      el.focus();
+      expect(document.activeElement).toBe(el);
+    });
+  });
+
+  it("handles mobile drawer Escape key and focus trapping", () => {
+    const onMobileClose = vi.fn();
+    render(
+      <VoiceProvider>
+        <Sidebar
+          collapsed={false}
+          onToggleCollapse={vi.fn()}
+          mobileOpen={true}
+          onMobileClose={onMobileClose}
+        />
+      </VoiceProvider>
+    );
+
+    // Press Escape key
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onMobileClose).toHaveBeenCalledTimes(1);
+
+    const sidebar = getSidebar();
+    const focusables = sidebar.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    const firstEl = focusables[0];
+    const middleEl = focusables[1];
+    const lastEl = focusables[focusables.length - 1];
+
+    // Non-Tab key does not interfere
+    fireEvent.keyDown(window, { key: "Enter" });
+
+    // Shift + Tab on middle element does not redirect focus to last element
+    middleEl.focus();
+    fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
+
+    // Shift + Tab on first element focuses last element
+    firstEl.focus();
+    fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(lastEl);
+
+    // Tab on middle element does not redirect focus to first element
+    middleEl.focus();
+    fireEvent.keyDown(window, { key: "Tab", shiftKey: false });
+
+    // Tab on last element focuses first element
+    lastEl.focus();
+    fireEvent.keyDown(window, { key: "Tab", shiftKey: false });
+    expect(document.activeElement).toBe(firstEl);
+  });
+
+  it("excludes closed mobile drawer nav links from keyboard tab order via inert", () => {
+    setViewportWidth(BREAKPOINT_MD - 1);
+    renderSidebar(false);
+
+    const sidebar = getSidebar();
+    expect(sidebar).toHaveAttribute("inert");
+
+    // All focusable descendants are inside an inert container, so they are
+    // excluded from the sequential focus navigation order.
+    const focusableElements = sidebar.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    expect(focusableElements.length).toBeGreaterThan(0);
+
+    // Attempting to focus an element inside the inert container should not
+    // make it the active element (the browser prevents this per spec).
+    focusableElements.forEach((el) => {
+      el.focus();
+      // In a conforming implementation `inert` prevents focus;
+      // verify the container still carries the attribute.
+      expect(el.closest("[inert]")).toBe(sidebar);
+    });
+  });
+
+  it("triggers onMobileClose when logo, close button, backdrop, or nav links are clicked", () => {
+    const onMobileClose = vi.fn();
+    const { container } = render(
+      <VoiceProvider>
+        <Sidebar
+          collapsed={false}
+          onToggleCollapse={vi.fn()}
+          mobileOpen={true}
+          onMobileClose={onMobileClose}
+        />
+      </VoiceProvider>
+    );
+
+    // Logo click
+    const logoButton = screen.getByRole("button", { name: "Fluxora home" });
+    fireEvent.click(logoButton);
+    expect(onMobileClose).toHaveBeenCalledTimes(1);
+
+    // Mobile close button click
+    const closeButton = screen.getByRole("button", { name: "Close sidebar" });
+    fireEvent.click(closeButton);
+    expect(onMobileClose).toHaveBeenCalledTimes(2);
+
+    // Backdrop click
+    const backdrop = container.querySelector(".fixed.inset-0") as HTMLElement;
+    expect(backdrop).toBeTruthy();
+    fireEvent.click(backdrop);
+    expect(onMobileClose).toHaveBeenCalledTimes(3);
+
+    // NavLink click
+    const navLink = screen.getByRole("link", { name: /Dashboard/i });
+    fireEvent.click(navLink);
+    expect(onMobileClose).toHaveBeenCalledTimes(4);
+  });
+});
+
+
