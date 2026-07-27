@@ -7,23 +7,16 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import ToastNotification, {
+  getStoredToastSoundPreference,
+  isToastSoundPreference,
+  playToastSound,
+  TOAST_SOUND_STORAGE_KEY,
+  type ToastSoundPreference,
+  type ToastVariant,
+} from "../ToastNotification";
 
-const TOAST_SOUND_STORAGE_KEY = "toast-sound";
-const TOAST_SOUND_ENABLED = "enabled";
-
-function readSoundPreference(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    const storedValue = window.localStorage.getItem(TOAST_SOUND_STORAGE_KEY);
-    return storedValue === TOAST_SOUND_ENABLED;
-  } catch {
-    return false;
-  }
-}
-import ToastNotification from "../ToastNotification";
-import type { ToastVariant } from "../ToastNotification";
-
-export type { ToastVariant };
+export type { ToastVariant, ToastSoundPreference };
 
 export interface ToastAction {
   label: string;
@@ -48,6 +41,10 @@ interface ToastContextValue {
   ) => string;
   /** Manually dismiss a toast by id. */
   dismiss: (id: string) => void;
+  /** Current sound preference. */
+  soundPreference: ToastSoundPreference;
+  /** Toggle sound preference between enabled and muted. */
+  toggleSoundPreference: () => void;
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
@@ -67,8 +64,35 @@ const DEFAULT_TIMEOUT = 4000;
  */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [soundEnabled, setSoundEnabled] = useState(readSoundPreference);
+  const [soundPreference, setSoundPreference] = useState<ToastSoundPreference>(
+    getStoredToastSoundPreference,
+  );
   const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  // Listen for storage changes across tabs
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === TOAST_SOUND_STORAGE_KEY) {
+        setSoundPreference(
+          isToastSoundPreference(event.newValue) ? event.newValue : "muted",
+        );
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
+
+  const toggleSoundPreference = useCallback(() => {
+    setSoundPreference((prev) => {
+      const next: ToastSoundPreference = prev === "enabled" ? "muted" : "enabled";
+      try {
+        window.localStorage.setItem(TOAST_SOUND_STORAGE_KEY, next);
+      } catch {
+        // Ignore quota/storage errors
+      }
+      return next;
+    });
+  }, []);
 
   const dismiss = useCallback((id: string) => {
     const timer = timers.current.get(id);
@@ -88,9 +112,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     ): string => {
       const id = crypto.randomUUID();
       setToasts((prev) => [...prev, { id, message, variant, timeout, action }]);
+      playToastSound(variant, soundPreference);
       return id;
     },
-    [],
+    [soundPreference],
   );
 
   const visible = toasts.slice(-MAX_VISIBLE);
@@ -125,32 +150,36 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const toggleSound = useCallback(() => {
-    setSoundEnabled((prev) => {
-      const next = !prev;
-      try {
-        window.localStorage.setItem(TOAST_SOUND_STORAGE_KEY, next ? TOAST_SOUND_ENABLED : "disabled");
-      } catch {
-        // Ignore storage failures and still update in-memory state.
-      }
-      return next;
-    });
-  }, []);
-
   return (
-    <ToastContext.Provider value={{ addToast, dismiss }}>
+    <ToastContext.Provider
+      value={{ addToast, dismiss, soundPreference, toggleSoundPreference }}
+    >
       {children}
       <div className="toast-stack" aria-label="Notifications">
-        <button
-          type="button"
-          onClick={toggleSound}
-          aria-label={soundEnabled ? "Mute sound alerts" : "Enable sound alerts"}
-        >
-          {soundEnabled ? "Mute sound alerts" : "Enable sound alerts"}
-        </button>
-        <p className="toast-sound-status">
-          {soundEnabled ? "Sound alerts are enabled." : "Sound alerts are off by default."}
-        </p>
+        <div className="toast-stack__controls">
+          <button
+            type="button"
+            className="toast-stack__sound-toggle"
+            onClick={toggleSoundPreference}
+            aria-label={
+              soundPreference === "enabled"
+                ? "Mute sound alerts"
+                : "Enable sound alerts"
+            }
+          >
+            <span aria-hidden="true">
+              {soundPreference === "enabled" ? "🔊" : "🔇"}
+            </span>
+            {soundPreference === "enabled"
+              ? "Mute sound alerts"
+              : "Enable sound alerts"}
+          </button>
+          <p className="toast-stack__sound-hint">
+            {soundPreference === "enabled"
+              ? "Sound alerts are enabled for this browser."
+              : "Sound alerts are off by default."}
+          </p>
+        </div>
         {overflow > 0 && (
           <div className="toast-stack__overflow" aria-live="polite">
             +{overflow} more notification{overflow > 1 ? "s" : ""}
