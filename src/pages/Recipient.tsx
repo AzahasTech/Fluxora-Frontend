@@ -12,6 +12,7 @@ import { withdraw } from "../lib/stellar/tx";
 import { getStreamStatusNotificationContent } from "../components/ToastNotification";
 import { TransactionReceiptPreview } from "../components/receipt/TransactionReceiptPreview";
 import type { ReceiptData } from "../utils/receiptGenerator";
+import { config } from "../lib/config";
 import { Shield, Fingerprint, Lock, Key, CheckCircle2, XCircle, AlertCircle, X } from "lucide-react";
 import RecipientMonthlySummary from "../components/recipient/RecipientMonthlySummary";
 import "./Streams.css";
@@ -560,7 +561,7 @@ export default function Recipient() {
         timestamp: new Date().toISOString(),
         txHash: typeof txRes === "string" ? txRes : null,
         status: typeof txRes === "string" ? "confirmed" : "pending",
-        network: wallet.network || "Stellar Testnet",
+        network: config.networkLabel,
       };
       setReceiptData(newReceipt);
       setShowReceiptModal(true);

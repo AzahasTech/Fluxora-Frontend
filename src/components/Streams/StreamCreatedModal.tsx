@@ -5,6 +5,7 @@ import { useModalAccessibility } from "../useModalAccessibility";
 import { useOptionalTheme } from "../../theme/ThemeProvider";
 import { TransactionReceiptPreview } from "../receipt/TransactionReceiptPreview";
 import { useClipboard } from "../../hooks/useClipboard";
+import { config } from "../../lib/config";
 
 interface StreamCreatedModalProps {
   isOpen: boolean;
@@ -292,6 +293,7 @@ export default function StreamCreatedModal({
               timestamp: new Date().toISOString(),
               txHash: txHash || null,
               status: txHash ? "confirmed" : "pending",
+              network: config.networkLabel,
             }}
           />
         </div>
