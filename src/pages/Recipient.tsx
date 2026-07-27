@@ -130,10 +130,12 @@ export default function Recipient() {
 
   // ── Local Security Gate States ──
   const [isBiometricSupported, setIsBiometricSupported] = useState(false);
-  const isBiometricEnrolled =
-    typeof window !== "undefined"
-      ? localStorage.getItem("fluxora_biometric_enrolled") === "true"
-      : false;
+  const [isBiometricEnrolled, setIsBiometricEnrolled] = useState(() => {
+    return localStorage.getItem("fluxora_biometric_enrolled") === "true";
+  });
+  const [backupPin, setBackupPin] = useState(() => {
+    return localStorage.getItem("fluxora_backup_pin");
+  });
   const [isSecurityGateEnabled, setIsSecurityGateEnabled] = useState(() => {
     return localStorage.getItem("fluxora_security_gate_enabled") === "true";
   });
@@ -148,7 +150,7 @@ export default function Recipient() {
   // Verification Modal States
   const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
   const [verifyState, setVerifyState] = useState('prompt-active');
-  const [, setVerifyPinValue] = useState("");
+  const [verifyPinValue, setVerifyPinValue] = useState("");
   const [verifyActionType, setVerifyActionType] = useState('withdraw');
   const [verifyError, setVerifyError] = useState<string | null>(null);
 
@@ -335,6 +337,21 @@ export default function Recipient() {
     isPending ||
     !selectedWithdrawStream;
 
+  const handleToggleSecurityGate = () => {
+    if (isSecurityGateEnabled) {
+      setVerifyActionType("disable_gate");
+      setVerifyState(isBiometricEnrolled && isBiometricSupported ? "prompt-active" : "unsupported-device-fallback");
+      setVerifyPinValue("");
+      setVerifyError(null);
+      setIsVerifyModalOpen(true);
+    } else {
+      setIsEnrollmentModalOpen(true);
+      setEnrollmentStep(isBiometricSupported ? "check-support" : "set-pin");
+      setPinValue("");
+      setConfirmPinValue("");
+      setEnrollmentError(null);
+    }
+  };
 
   const handleUpdatePIN = () => {
     setIsEnrollmentModalOpen(true);
