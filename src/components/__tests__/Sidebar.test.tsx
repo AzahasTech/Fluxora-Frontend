@@ -1,9 +1,4 @@
-<<<<<<< HEAD
-import { render } from "@testing-library/react";
-import { act } from "react";
-=======
 import { act, fireEvent, render, screen } from "@testing-library/react";
->>>>>>> 1020b8026963b726bbb48da50c644df0f980b5ea
 import { Profiler, type ProfilerOnRenderCallback } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Sidebar from "../Sidebar";
