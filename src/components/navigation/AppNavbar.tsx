@@ -300,12 +300,28 @@ export default function AppNavbar({
   } = useWallet();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [isPaletteOpen, setIsPaletteOpen] = useState(false);
 
   // Simulate a brief "connecting" state on first mount when wallet restores session
   useEffect(() => {
     setConnecting(true);
     const t = setTimeout(() => setConnecting(false), 600);
     return () => clearTimeout(t);
+  }, []);
+
+  const openPalette = useCallback(() => setIsPaletteOpen(true), []);
+  const closePalette = useCallback(() => setIsPaletteOpen(false), []);
+
+  // Global Cmd/Ctrl+K shortcut
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setIsPaletteOpen((open) => !open);
+      }
+    };
+    document.addEventListener("keydown", handleGlobalKeyDown);
+    return () => document.removeEventListener("keydown", handleGlobalKeyDown);
   }, []);
 
 const location = useLocation();
@@ -570,6 +586,9 @@ const location = useLocation();
           </div>
         </div>
       )}
+
+      {/* Command Palette — rendered inside header but uses fixed positioning */}
+      <KeyboardShortcutsModal isOpen={isPaletteOpen} onClose={closePalette} />
     </header>
   );
 }
