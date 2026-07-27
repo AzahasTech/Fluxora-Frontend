@@ -18,13 +18,14 @@ const getOrigin = (): string => {
  * Uses a dynamic image URL that points to the server-generated OG image.
  */
 export const MetaTags: React.FC<{ stream: StreamRecord }> = ({ stream }) => {
-  const origin = getOrigin();
-  const updatedAtTimestamp = stream.updatedAt ? Date.parse(stream.updatedAt) : 0;
-  const cacheBuster = Number.isFinite(updatedAtTimestamp) ? updatedAtTimestamp : 0;
-  const ogImageUrl = `${origin}/og-image/${stream.id}.png?v=${cacheBuster}`;
+  const parsedEndDate = stream.endDate ? Date.parse(stream.endDate) : Number.NaN;
+  const hasValidEndDate = Number.isFinite(parsedEndDate);
+  const ogImageUrl = hasValidEndDate
+    ? `https://fluxora.app/og-image/${stream.id}.png?v=${parsedEndDate}`
+    : `https://fluxora.app/og-image/${stream.id}.png`;
   const ogTitle = `${stream.name} – Fluxora`;
   const ogDescription = stream.summary ?? 'Stream treasury capital on Stellar';
-  const ogAlt = `Fluxora stream ${stream.name}, status ${stream.status}, recipient ${stream.recipient}`;
+  const ogAlt = `Fluxora stream ${stream.name}, status ${stream.status}, recipient ${stream.recipientName}`;
 
   return (
     <Helmet>

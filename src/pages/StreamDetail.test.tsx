@@ -93,4 +93,30 @@ describe("StreamDetail MetaTags Integration", () => {
       expect(ogImage?.getAttribute("content")).toContain(`?v=${expectedTimestamp}`);
     });
   });
+
+  it("omits the cache-busting query when updatedAt is missing", async () => {
+    const helmetContext = {};
+    const streamWithoutUpdate = {
+      ...mockStream,
+      updatedAt: undefined,
+    };
+
+    render(
+      <HelmetProvider context={helmetContext}>
+        <MetaTags stream={streamWithoutUpdate} />
+      </HelmetProvider>
+    );
+
+    await waitFor(() => {
+      const ogImage = document.querySelector('meta[property="og:image"]');
+      const twitterImage = document.querySelector('meta[name="twitter:image"]');
+      const imageContent = ogImage?.getAttribute("content") ?? "";
+      const twitterContent = twitterImage?.getAttribute("content") ?? "";
+
+      expect(imageContent).not.toContain("v=NaN");
+      expect(twitterContent).not.toContain("v=NaN");
+      expect(imageContent).toContain("https://fluxora.app/og-image/STR-001.png");
+      expect(twitterContent).toContain("https://fluxora.app/og-image/STR-001.png");
+    });
+  });
 });

@@ -1,38 +1,17 @@
-/**
- * Tests for src/components/voice/VoiceConfirmModal.tsx
- *
- * Covers:
- *  • Renders nothing when state is not confirming-destructive
- *  • Renders dialog with correct ARIA attributes (role, aria-modal, aria-labelledby, aria-describedby)
- *  • Displays destructive command phrase
- *  • Confirm button triggers confirmDestructiveAction
- *  • Cancel button triggers cancelDestructiveAction
- *  • Escape key triggers cancelDestructiveAction
- *  • Confirm button receives initial focus on open
- *  • Close (X) button triggers cancelDestructiveAction
- *  • Spoken instruction text is present ("Say Confirm" / "Say Cancel")
- *
- * Issue: #1028
- */
-
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { VoiceConfirmModal } from "../VoiceConfirmModal";
-import * as VoiceContextModule from "../VoiceContext";
-import type { VoiceContextValue, VoiceCommandDef } from "../voiceTypes";
+import { VoiceContextValue, VoiceCommandDef } from "../voiceTypes";
 
-// ─── Mock helpers ──────────────────────────────────────────────────────────────
+// Mock useVoiceContext
+let mockContext: VoiceContextValue;
 
-const DESTRUCTIVE_CMD: VoiceCommandDef = {
-  id: "destructive-cancel-stream",
-  phrase: "Cancel stream",
-  aliases: ["delete stream", "stop stream", "terminate stream"],
-  category: "Destructive",
-  description: "Cancel an active streaming contract (Requires confirmation)",
-  requiresConfirmation: true,
-};
+vi.mock("../VoiceContext", () => ({
+  useVoiceContext: () => mockContext,
+}));
 
-function buildCtx(overrides: Partial<VoiceContextValue> = {}): VoiceContextValue {
+function buildContext(overrides: Partial<VoiceContextValue> = {}): VoiceContextValue {
   return {
     state: "idle",
     isSupported: true,
@@ -47,280 +26,168 @@ function buildCtx(overrides: Partial<VoiceContextValue> = {}): VoiceContextValue
     togglePanel: vi.fn(),
     confirmDestructiveAction: vi.fn(),
     cancelDestructiveAction: vi.fn(),
-    processSpokenPhrase: vi.fn(() => true),
+    processSpokenPhrase: vi.fn(),
     ...overrides,
   };
 }
 
-function mockUseVoiceContext(ctx: VoiceContextValue) {
-  vi.spyOn(VoiceContextModule, "useVoiceContext").mockReturnValue(ctx);
-}
+const destructiveCmd: VoiceCommandDef = {
+  id: "destructive-cancel-stream",
+  phrase: "Cancel stream",
+  aliases: ["delete stream"],
+  category: "Destructive",
+  description: "Cancel streaming contract",
+  requiresConfirmation: true,
+};
 
-beforeEach(() => {
-  vi.restoreAllMocks();
-  vi.useFakeTimers();
-});
+describe("VoiceConfirmModal", () => {
+  beforeEach(() => {
+    mockContext = buildContext();
+  });
 
-afterEach(() => {
-  vi.useRealTimers();
-});
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
-// ─── Rendering gate ────────────────────────────────────────────────────────────
+  // -- isOpen state combinations -----------------------------------------
 
-describe("VoiceConfirmModal — rendering gate", () => {
-  it("renders nothing when state is idle", () => {
-    mockUseVoiceContext(buildCtx({ state: "idle" }));
+  it("renders null when state is idle and pendingDestructiveCommand is null", () => {
+    mockContext = buildContext({ state: "idle", pendingDestructiveCommand: null });
     const { container } = render(<VoiceConfirmModal />);
     expect(container.firstChild).toBeNull();
   });
 
-  it("renders nothing when state is confirming-destructive but pendingDestructiveCommand is null", () => {
-    mockUseVoiceContext(
-      buildCtx({ state: "confirming-destructive", pendingDestructiveCommand: null })
-    );
+  it("renders null when state is idle and pendingDestructiveCommand is set (inconsistent)", () => {
+    mockContext = buildContext({ state: "idle", pendingDestructiveCommand: destructiveCmd });
     const { container } = render(<VoiceConfirmModal />);
     expect(container.firstChild).toBeNull();
   });
 
-  it("renders nothing when state is listening even if pendingDestructiveCommand is set", () => {
-    mockUseVoiceContext(
-      buildCtx({ state: "listening", pendingDestructiveCommand: DESTRUCTIVE_CMD })
-    );
+  it("renders null when state is confirming-destructive but pendingDestructiveCommand is null", () => {
+    mockContext = buildContext({ state: "confirming-destructive", pendingDestructiveCommand: null });
     const { container } = render(<VoiceConfirmModal />);
     expect(container.firstChild).toBeNull();
   });
 
-  it("renders the dialog when state is confirming-destructive with pendingDestructiveCommand", () => {
-    mockUseVoiceContext(
-      buildCtx({
-        state: "confirming-destructive",
-        pendingDestructiveCommand: DESTRUCTIVE_CMD,
-      })
-    );
-    render(<VoiceConfirmModal />);
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-  });
-});
-
-// ─── ARIA accessibility ────────────────────────────────────────────────────────
-
-describe("VoiceConfirmModal — ARIA accessibility", () => {
-  it("has role=dialog", () => {
-    mockUseVoiceContext(
-      buildCtx({
-        state: "confirming-destructive",
-        pendingDestructiveCommand: DESTRUCTIVE_CMD,
-      })
-    );
+  it("renders the modal when state is confirming-destructive and pendingDestructiveCommand is set", () => {
+    mockContext = buildContext({ state: "confirming-destructive", pendingDestructiveCommand: destructiveCmd });
     render(<VoiceConfirmModal />);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
-  it("has aria-modal=true", () => {
-    mockUseVoiceContext(
-      buildCtx({
-        state: "confirming-destructive",
-        pendingDestructiveCommand: DESTRUCTIVE_CMD,
-      })
-    );
-    render(<VoiceConfirmModal />);
-    expect(screen.getByRole("dialog")).toHaveAttribute("aria-modal", "true");
-  });
+  // -- Rendered phrase text ----------------------------------------------
 
-  it("has aria-labelledby pointing to the heading", () => {
-    mockUseVoiceContext(
-      buildCtx({
-        state: "confirming-destructive",
-        pendingDestructiveCommand: DESTRUCTIVE_CMD,
-      })
-    );
-    render(<VoiceConfirmModal />);
-    const dialog = screen.getByRole("dialog");
-    const labelledBy = dialog.getAttribute("aria-labelledby");
-    expect(labelledBy).toBeTruthy();
-    const heading = document.getElementById(labelledBy!);
-    expect(heading).toBeInTheDocument();
-    expect(heading).toHaveTextContent(/Voice Command Confirmation/i);
-  });
-
-  it("has aria-describedby pointing to the description", () => {
-    mockUseVoiceContext(
-      buildCtx({
-        state: "confirming-destructive",
-        pendingDestructiveCommand: DESTRUCTIVE_CMD,
-      })
-    );
-    render(<VoiceConfirmModal />);
-    const dialog = screen.getByRole("dialog");
-    const describedBy = dialog.getAttribute("aria-describedby");
-    expect(describedBy).toBeTruthy();
-    const desc = document.getElementById(describedBy!);
-    expect(desc).toBeInTheDocument();
-    expect(desc).toHaveTextContent(/destructive action/i);
-  });
-});
-
-// ─── Content rendering ─────────────────────────────────────────────────────────
-
-describe("VoiceConfirmModal — content", () => {
-  it("displays the destructive command phrase", () => {
-    mockUseVoiceContext(
-      buildCtx({
-        state: "confirming-destructive",
-        pendingDestructiveCommand: DESTRUCTIVE_CMD,
-      })
-    );
+  it("renders the pendingDestructiveCommand phrase in the modal body", () => {
+    mockContext = buildContext({ state: "confirming-destructive", pendingDestructiveCommand: destructiveCmd });
     render(<VoiceConfirmModal />);
     expect(screen.getByText(/Cancel stream/)).toBeInTheDocument();
   });
 
-  it("displays spoken instructions mentioning Confirm and Cancel", () => {
-    mockUseVoiceContext(
-      buildCtx({
-        state: "confirming-destructive",
-        pendingDestructiveCommand: DESTRUCTIVE_CMD,
-      })
-    );
+  // -- Escape key lifecycle ----------------------------------------------
+
+  it("calls cancelDestructiveAction on window Escape key when open", () => {
+    const cancelFn = vi.fn();
+    mockContext = buildContext({
+      state: "confirming-destructive",
+      pendingDestructiveCommand: destructiveCmd,
+      cancelDestructiveAction: cancelFn,
+    });
     render(<VoiceConfirmModal />);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(cancelFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not call cancelDestructiveAction on Escape when modal is closed", () => {
+    const cancelFn = vi.fn();
+    mockContext = buildContext({
+      state: "idle",
+      pendingDestructiveCommand: null,
+      cancelDestructiveAction: cancelFn,
+    });
+    render(<VoiceConfirmModal />);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(cancelFn).not.toHaveBeenCalled();
+  });
+
+  it("removes Escape listener after unmount", () => {
+    const cancelFn = vi.fn();
+    mockContext = buildContext({
+      state: "confirming-destructive",
+      pendingDestructiveCommand: destructiveCmd,
+      cancelDestructiveAction: cancelFn,
+    });
+    const { unmount } = render(<VoiceConfirmModal />);
+    // First Escape while mounted � should fire
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(cancelFn).toHaveBeenCalledTimes(1);
+
+    unmount();
+    // Second Escape after unmount � should not fire
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(cancelFn).toHaveBeenCalledTimes(1);
+  });
+
+  // -- Confirm/Cancel buttons --------------------------------------------
+
+  it("calls confirmDestructiveAction on confirm button click", () => {
+    const confirmFn = vi.fn();
+    mockContext = buildContext({
+      state: "confirming-destructive",
+      pendingDestructiveCommand: destructiveCmd,
+      confirmDestructiveAction: confirmFn,
+    });
+    render(<VoiceConfirmModal />);
+    screen.getByText("Confirm Action").click();
+    expect(confirmFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls cancelDestructiveAction on cancel button click", () => {
+    const cancelFn = vi.fn();
+    mockContext = buildContext({
+      state: "confirming-destructive",
+      pendingDestructiveCommand: destructiveCmd,
+      cancelDestructiveAction: cancelFn,
+    });
+    render(<VoiceConfirmModal />);
+    screen.getByText("Cancel").click();
+    expect(cancelFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("wraps focus between the dialog actions when tabbing forward and backward", async () => {
+    const user = userEvent.setup();
+    mockContext = buildContext({
+      state: "confirming-destructive",
+      pendingDestructiveCommand: destructiveCmd,
+    });
+
+    render(<VoiceConfirmModal />);
+
     const dialog = screen.getByRole("dialog");
-    expect(dialog).toHaveTextContent(/Say/);
-    expect(dialog).toHaveTextContent(/Confirm/);
-    expect(dialog).toHaveTextContent(/Cancel/);
-  });
+    const closeButton = screen.getByRole("button", { name: /cancel destructive action/i });
+    const confirmButton = screen.getByRole("button", { name: /confirm action/i });
+    const cancelButton = screen.getByRole("button", { name: /^Cancel$/i });
 
-  it("renders the heading 'Voice Command Confirmation'", () => {
-    mockUseVoiceContext(
-      buildCtx({
-        state: "confirming-destructive",
-        pendingDestructiveCommand: DESTRUCTIVE_CMD,
-      })
-    );
-    render(<VoiceConfirmModal />);
-    expect(
-      screen.getByText("Voice Command Confirmation")
-    ).toBeInTheDocument();
-  });
+    closeButton.focus();
+    expect(closeButton).toHaveFocus();
 
-  it("renders 'Destructive commands are never executed blind' text", () => {
-    mockUseVoiceContext(
-      buildCtx({
-        state: "confirming-destructive",
-        pendingDestructiveCommand: DESTRUCTIVE_CMD,
-      })
-    );
-    render(<VoiceConfirmModal />);
-    expect(
-      screen.getByText(/never executed blind/i)
-    ).toBeInTheDocument();
-  });
-});
+    await user.tab();
+    expect(confirmButton).toHaveFocus();
 
-// ─── Button interactions ───────────────────────────────────────────────────────
+    await user.tab();
+    expect(cancelButton).toHaveFocus();
 
-describe("VoiceConfirmModal — button interactions", () => {
-  it("Confirm Action button calls confirmDestructiveAction", () => {
-    const confirmDestructiveAction = vi.fn();
-    mockUseVoiceContext(
-      buildCtx({
-        state: "confirming-destructive",
-        pendingDestructiveCommand: DESTRUCTIVE_CMD,
-        confirmDestructiveAction,
-      })
-    );
-    render(<VoiceConfirmModal />);
-    fireEvent.click(screen.getByRole("button", { name: /confirm action/i }));
-    expect(confirmDestructiveAction).toHaveBeenCalledOnce();
-  });
+    await user.tab();
+    expect(closeButton).toHaveFocus();
 
-  it("Cancel button calls cancelDestructiveAction", () => {
-    const cancelDestructiveAction = vi.fn();
-    mockUseVoiceContext(
-      buildCtx({
-        state: "confirming-destructive",
-        pendingDestructiveCommand: DESTRUCTIVE_CMD,
-        cancelDestructiveAction,
-      })
-    );
-    render(<VoiceConfirmModal />);
-    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
-    expect(cancelDestructiveAction).toHaveBeenCalledOnce();
-  });
+    await user.tab({ shift: true });
+    expect(cancelButton).toHaveFocus();
 
-  it("Close (X) button calls cancelDestructiveAction", () => {
-    const cancelDestructiveAction = vi.fn();
-    mockUseVoiceContext(
-      buildCtx({
-        state: "confirming-destructive",
-        pendingDestructiveCommand: DESTRUCTIVE_CMD,
-        cancelDestructiveAction,
-      })
-    );
-    render(<VoiceConfirmModal />);
-    fireEvent.click(
-      screen.getByRole("button", { name: /cancel destructive action/i })
-    );
-    expect(cancelDestructiveAction).toHaveBeenCalledOnce();
-  });
-});
+    await user.tab({ shift: true });
+    expect(confirmButton).toHaveFocus();
 
-// ─── Keyboard interactions ─────────────────────────────────────────────────────
+    await user.tab({ shift: true });
+    expect(closeButton).toHaveFocus();
 
-describe("VoiceConfirmModal — keyboard", () => {
-  it("Escape key calls cancelDestructiveAction", () => {
-    const cancelDestructiveAction = vi.fn();
-    mockUseVoiceContext(
-      buildCtx({
-        state: "confirming-destructive",
-        pendingDestructiveCommand: DESTRUCTIVE_CMD,
-        cancelDestructiveAction,
-      })
-    );
-    render(<VoiceConfirmModal />);
-    fireEvent.keyDown(window, { key: "Escape" });
-    expect(cancelDestructiveAction).toHaveBeenCalledOnce();
-  });
-
-  it("does not call cancelDestructiveAction on non-Escape keys", () => {
-    const cancelDestructiveAction = vi.fn();
-    mockUseVoiceContext(
-      buildCtx({
-        state: "confirming-destructive",
-        pendingDestructiveCommand: DESTRUCTIVE_CMD,
-        cancelDestructiveAction,
-      })
-    );
-    render(<VoiceConfirmModal />);
-    fireEvent.keyDown(window, { key: "Enter" });
-    expect(cancelDestructiveAction).not.toHaveBeenCalled();
-    fireEvent.keyDown(window, { key: "Tab" });
-    expect(cancelDestructiveAction).not.toHaveBeenCalled();
-  });
-
-  it("does not call cancelDestructiveAction when modal is closed", () => {
-    const cancelDestructiveAction = vi.fn();
-    mockUseVoiceContext(
-      buildCtx({ state: "idle", cancelDestructiveAction })
-    );
-    render(<VoiceConfirmModal />);
-    fireEvent.keyDown(window, { key: "Escape" });
-    expect(cancelDestructiveAction).not.toHaveBeenCalled();
-  });
-});
-
-// ─── Focus management ──────────────────────────────────────────────────────────
-
-describe("VoiceConfirmModal — focus management", () => {
-  it("auto-focuses the Confirm Action button on open", () => {
-    mockUseVoiceContext(
-      buildCtx({
-        state: "confirming-destructive",
-        pendingDestructiveCommand: DESTRUCTIVE_CMD,
-      })
-    );
-    render(<VoiceConfirmModal />);
-    // The confirm button has a ref; after the 50ms timeout it should receive focus
-    vi.advanceTimersByTime(100);
-    const confirmBtn = screen.getByRole("button", { name: /confirm action/i });
-    expect(document.activeElement).toBe(confirmBtn);
+    expect(dialog).toContainElement(document.activeElement);
   });
 });

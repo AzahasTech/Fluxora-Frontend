@@ -12,7 +12,6 @@ export interface VoiceMicButtonProps {
 
 export const VoiceMicButton: React.FC<VoiceMicButtonProps> = ({
   variant = "navbar",
-  showLabel = false,
   className,
 }) => {
   const { state, isSupported, toggleListening, togglePanel, panelOpen } =
