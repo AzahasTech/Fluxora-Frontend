@@ -10,7 +10,7 @@ import StreamComparePane from "../components/StreamComparePane";
 import { useTickingNow } from "../hooks/useTickingNow";
 import { MetaTags } from "../components/MetaTags";
 import { usePresenceViewers } from "../hooks/usePresenceViewers";
-import { PresenceBadge } from "../components/presence";
+import { PresenceBadge, PresenceCursorOverlay } from "../components/presence";
 
 /**
  * StreamDetail page
@@ -37,7 +37,7 @@ import { PresenceBadge } from "../components/presence";
 export default function StreamDetail() {
   const { streamId } = useParams<{ streamId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { viewers, isPresenceEnabled } = usePresenceViewers(streamId);
+  const { viewers, isPresenceEnabled, updateCursor } = usePresenceViewers(streamId);
 
   // Compare mode: ?compare=<otherStreamId>
   const compareWithId = searchParams.get("compare");
@@ -90,6 +90,26 @@ export default function StreamDetail() {
       controller.abort();
     };
   }, [streamId, isCompareMode]);
+
+  // Track local scroll position to broadcast cursorY
+  useEffect(() => {
+    if (!isPresenceEnabled) return;
+    const handleScroll = () => {
+      const scrollY = window.scrollY + window.innerHeight / 2;
+      const docHeight = Math.max(
+        document.body.scrollHeight,
+        document.documentElement.scrollHeight,
+      );
+      updateCursor(docHeight > 0 ? scrollY / docHeight : 0);
+    };
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("resize", handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("resize", handleScroll);
+    };
+  }, [isPresenceEnabled, updateCursor]);
 
   // ── Compare mode ──────────────────────────────────────────────────────────
   if (isCompareMode && streamId && compareWithId) {
@@ -382,6 +402,11 @@ export default function StreamDetail() {
             {stream.auditNote}
           </p>
         </section>
+      )}
+
+      {/* Cursor indicator overlays */}
+      {isPresenceEnabled && (
+        <PresenceCursorOverlay viewers={viewers} />
       )}
     </div>
   );
