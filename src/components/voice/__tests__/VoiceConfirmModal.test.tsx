@@ -117,12 +117,12 @@ describe("VoiceConfirmModal", () => {
       cancelDestructiveAction: cancelFn,
     });
     const { unmount } = render(<VoiceConfirmModal />);
-    // First Escape while mounted � should fire
+    // First Escape while mounted — should fire
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     expect(cancelFn).toHaveBeenCalledTimes(1);
 
     unmount();
-    // Second Escape after unmount � should not fire
+    // Second Escape after unmount — should not fire
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     expect(cancelFn).toHaveBeenCalledTimes(1);
   });
@@ -181,7 +181,9 @@ describe("VoiceConfirmModal", () => {
   });
 
   it("wraps focus between the dialog actions when tabbing forward and backward", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     const user = userEvent.setup();
+
     mockContext = buildContext({
       state: "confirming-destructive",
       pendingDestructiveCommand: destructiveCmd,
@@ -189,9 +191,9 @@ describe("VoiceConfirmModal", () => {
 
     render(<VoiceConfirmModal />);
 
-    // Wait for the auto-focus setTimeout to fire, then manually place focus
-    // on the close button to start a deterministic tab sequence
-    await new Promise((r) => setTimeout(r, 100));
+    // advanceTimersByTimeAsync flushes microtasks between each tick,
+    // so the auto-focus setTimeout fires deterministically before we start
+    await vi.advanceTimersByTimeAsync(100);
 
     const dialog = screen.getByRole("dialog");
     const closeButton = screen.getByRole("button", { name: /cancel destructive action/i });
@@ -220,5 +222,7 @@ describe("VoiceConfirmModal", () => {
     expect(closeButton).toHaveFocus();
 
     expect(dialog as HTMLElement).toContainElement(document.activeElement as HTMLElement);
+
+    vi.useRealTimers();
   });
 });
