@@ -2,17 +2,6 @@ import React from 'react';
 import { Helmet } from 'react-helmet-async';
 import type { StreamRecord } from '../data/streamRecords';
 
-const getOrigin = (): string => {
-  if (
-    typeof globalThis !== 'undefined' &&
-    typeof globalThis.location !== 'undefined' &&
-    globalThis.location.origin
-  ) {
-    return globalThis.location.origin;
-  }
-  return 'https://fluxora.app';
-};
-
 /**
  * Generates Open Graph and Twitter meta tags for a given stream.
  * Uses a dynamic image URL that points to the server-generated OG image.
