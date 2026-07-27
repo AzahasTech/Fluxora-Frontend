@@ -476,7 +476,8 @@ describe('createAccessibleWidgetContainer', () => {
 
   it('should handle cleanup with no options gracefully', () => {
     cleanup = createAccessibleWidgetContainer(element);
-    expect(() => cleanup()).not.toThrow();
+    const fn = cleanup;
+    expect(() => fn?.()).not.toThrow();
   });
 
   it('should remove aria attributes that were added when there was no original value', () => {

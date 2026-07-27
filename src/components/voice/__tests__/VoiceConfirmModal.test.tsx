@@ -188,6 +188,6 @@ describe("VoiceConfirmModal", () => {
     await user.tab({ shift: true });
     expect(closeButton).toHaveFocus();
 
-    expect(dialog).toContainElement(document.activeElement);
+    expect(dialog as HTMLElement).toContainElement(document.activeElement as HTMLElement);
   });
 });
