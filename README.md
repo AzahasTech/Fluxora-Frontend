@@ -211,8 +211,7 @@ modal. Wallet entry points, including `WalletButton`, should route Freighter,
 Albedo, and WalletConnect actions through this component so error states and
 focus management stay consistent.
 
-`src/components/ConnectWalletModal.example.tsx` is a sample-only review surface
-and is not imported by the application routes.
+# The ConnectWalletModal example file has been removed.
 
 ## App route guard
 
