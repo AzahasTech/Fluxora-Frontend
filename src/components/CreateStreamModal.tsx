@@ -235,6 +235,7 @@ export default function CreateStreamModal({
 
   const [currentStep, setCurrentStep] = useState(1);
   const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string | undefined>>({});
   const [streamError, setStreamError] = useState<string | null>(null);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -553,40 +554,32 @@ export default function CreateStreamModal({
   };
 
   const validateStep1 = (): boolean => {
+    const newErrors: Record<string, string> = {};
+    
     if (!recipient.trim()) {
-      setError(t("createStream.validation.recipientRequired"));
-      return false;
+      newErrors.recipient = t("createStream.validation.recipientRequired");
     }
     const normalizedRecipient = recipient.trim();
 
-    /**
-     * Self-send rule: Reject streams where the recipient equals the connected wallet address.
-     * This prevents users from wasting a deposit on a no-op transfer to themselves.
-     */
     if (wallet.connected && wallet.address && normalizedRecipient.toLowerCase() === wallet.address.toLowerCase()) {
-      setError("Recipient cannot be the same as the connected wallet address.");
-      return false;
+      newErrors.recipient = "Recipient cannot be the same as the connected wallet address.";
     }
 
     if (!isValidStellarAddress(normalizedRecipient)) {
-      setError(
-        t("createStream.validation.recipientInvalid"),
-      );
-      return false;
+      newErrors.recipient = t("createStream.validation.recipientInvalid");
     }
+    
     const amount = parseFloat(depositAmount.replace(/,/g, ""));
     if (!depositAmount.trim() || isNaN(amount) || amount <= 0) {
-      setError(t("createStream.validation.depositPositive"));
-      return false;
+      newErrors.depositAmount = t("createStream.validation.depositPositive");
     }
 
     if (contrastState === 'AA-fail-blocked') {
-      setError("Please select a high-contrast label color or check 'Use anyway' to proceed.");
-      return false;
+      newErrors.labelColor = "Please select a high-contrast label color or check 'Use anyway' to proceed.";
     }
 
-    setError(null);
-    return true;
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const validateStep2 = (): boolean => {
@@ -1571,7 +1564,7 @@ export default function CreateStreamModal({
                       value={recipient}
                       onChange={(e) => {
                         setRecipient(e.target.value);
-                        if (error) setError(null);
+                        if (errors.recipient) setErrors(prev => ({ ...prev, recipient: undefined }));
                       }}
                       onBlur={() => handleBlur('recipient')}
                       placeholder={t("createStream.step1.recipientPlaceholder")}
@@ -1595,7 +1588,7 @@ export default function CreateStreamModal({
                       onChange={(e) => {
                         const v = sanitizeDepositAmountInput(e.target.value);
                         setDepositAmount(v);
-                        if (error) setError(null);
+                        if (errors.depositAmount) setErrors(prev => ({ ...prev, depositAmount: undefined }));
                       }}
                       onBlur={() => handleBlur('depositAmount')}
                       placeholder={t("createStream.step1.depositPlaceholder")}
