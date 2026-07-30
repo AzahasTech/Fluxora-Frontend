@@ -191,14 +191,17 @@ describe('Property 10: Success state sets aria-invalid="false"', () => {
  * Validates: Requirements 5.3
  */
 describe('Property 11: Error replaces hint — mutual exclusion', () => {
-  it('only error ValidationMessage is rendered when both error and helperText are set', () => {
+  it('renders both messages and references both ids when error and helperText are set', () => {
     fc.assert(
       fc.property(idArb, labelArb, messageArb, messageArb, (id, label, error, helperText) => {
         const { container, unmount } = renderField({ id, label, error, helperText });
         const errorMsg = container.querySelector('.validation-message--error');
         const hintMsg = container.querySelector('.validation-message--hint');
         expect(errorMsg).not.toBeNull();
-        expect(hintMsg).toBeNull();
+        expect(hintMsg).not.toBeNull();
+        expect(input!.getAttribute('aria-describedby')!.split(/\s+/)).toEqual(
+          expect.arrayContaining([`${id}-hint`, `${id}-error`]),
+        );
         unmount();
       }),
       { numRuns: 100 }

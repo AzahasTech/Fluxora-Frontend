@@ -26,15 +26,13 @@ export const InputField: React.FC<InputFieldProps> = ({
   const [isComposing, setIsComposing] = React.useState(false);
   // Determine which message (if any) is active
   const hasError = Boolean(error) && !(compositionAware && isComposing);
-  const hasHint = Boolean(helperText) && !hasError;
+  const hasHint = Boolean(helperText);
   const hasSuccess = success === true && !hasError;
 
   // Build the id for the active ValidationMessage
-  const messageId = hasError
-    ? `${id}-error`
-    : hasHint
-    ? `${id}-hint`
-    : undefined;
+  const messageId = [hasHint ? `${id}-hint` : null, hasError ? `${id}-error` : null]
+    .filter(Boolean)
+    .join(' ') || undefined;
 
   // Determine container modifier class
   const containerModifier = hasError
