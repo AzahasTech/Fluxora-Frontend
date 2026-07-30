@@ -773,6 +773,93 @@ describe("Recipient page error and retry state hardening", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /connect your wallet/i })).toBeInTheDocument();
   });
+
+  it("moves focus to the retry button when a service error first appears (WCAG focus order)", () => {
+    walletState.connected = true;
+    walletState.address = "GATDOSCZNJ5YZHNOX7IOD4QDCQSTMR2YNF5IXHFNX3H6B4ICCMSDLOWN";
+    walletState.network = "TESTNET";
+    recipientStreamsState.error = null;
+    recipientStreamsState.loading = false;
+    recipientStreamsState.streams = [];
+
+    const { rerender } = render(<Recipient />);
+    advancePastMinLoading();
+
+    // Initially no error — connect wallet CTA is present
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    // Introduce error — retry button should receive focus
+    recipientStreamsState.error = "Connection lost.";
+    rerender(<Recipient />);
+    act(() => { vi.advanceTimersByTime(0); });
+
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    const retryBtn = screen.getByRole("button", { name: "Retry loading data" });
+    expect(retryBtn).toHaveFocus();
+  });
+
+  it("retry button is a native button that supports keyboard activation by default", () => {
+    walletState.connected = true;
+    walletState.address = "GATDOSCZNJ5YZHNOX7IOD4QDCQSTMR2YNF5IXHFNX3H6B4ICCMSDLOWN";
+    walletState.network = "TESTNET";
+    recipientStreamsState.error = "retry me";
+    recipientStreamsState.loading = false;
+    recipientStreamsState.streams = [];
+
+    renderRecipientAndWaitForMinLoading();
+
+    const retryBtn = screen.getByRole("button", { name: "Retry loading data" });
+    // Native <button> element — keyboard events handled by the browser
+    expect(retryBtn.tagName).toBe("BUTTON");
+  });
+
+  it("retry button is disabled while the service is still loading after retry", () => {
+    walletState.connected = true;
+    walletState.address = "GATDOSCZNJ5YZHNOX7IOD4QDCQSTMR2YNF5IXHFNX3H6B4ICCMSDLOWN";
+    walletState.network = "TESTNET";
+    // Start with an error
+    recipientStreamsState.error = "temporary error";
+    recipientStreamsState.loading = false;
+    recipientStreamsState.streams = [];
+
+    renderRecipientAndWaitForMinLoading();
+
+    const retryBtnBefore = screen.getByRole("button", { name: "Retry loading data" });
+    expect(retryBtnBefore).toBeEnabled();
+
+    // Click retry
+    fireEvent.click(retryBtnBefore);
+
+    // Now simulate concurrent loading + still having an error
+    recipientStreamsState.loading = true;
+    act(() => { vi.advanceTimersByTime(0); });
+
+    const retryBtnAfter = screen.getByRole("button", { name: "Retry loading data" });
+    expect(retryBtnAfter).toBeDisabled();
+  });
+
+  it("bypasses full-page loading when wallet disconnects mid-fetch", () => {
+    walletState.connected = true;
+    walletState.address = "GATDOSCZNJ5YZHNOX7IOD4QDCQSTMR2YNF5IXHFNX3H6B4ICCMSDLOWN";
+    walletState.network = "TESTNET";
+    recipientStreamsState.loading = true;
+    recipientStreamsState.streams = [];
+
+    const { rerender } = render(<Recipient />);
+
+    // Loading skeleton is visible
+    expect(screen.getByRole("status", { name: "Loading recipient portal" })).toBeInTheDocument();
+
+    // Wallet disconnects mid-fetch
+    walletState.connected = false;
+    walletState.address = null;
+    rerender(<Recipient />);
+    act(() => { vi.advanceTimersByTime(0); });
+
+    // Should immediately show empty state, not loading skeleton
+    expect(screen.queryByRole("status", { name: "Loading recipient portal" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Recipient empty state" })).toBeInTheDocument();
+  });
 });
 
 describe("Recipient page backward-compat regression guards", () => {

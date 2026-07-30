@@ -270,10 +270,10 @@ export default function Recipient() {
     };
   }, []);
 
-  const fetchIncomingStreams = async (): Promise<Stream[]> => [
+  const fetchIncomingStreams = useCallback(async (): Promise<Stream[]> => [
     { id: "1", sender: "Treasury", amount: "12000", status: "active" },
     { id: "2", sender: "Payroll", amount: "8600", status: "active" },
-  ];
+  ], []);
 
   const liveStreams = recipientStreams.streams;
   // A service error means we cannot confirm the recipient has no streams —
