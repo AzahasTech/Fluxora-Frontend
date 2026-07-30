@@ -16,6 +16,14 @@ import { stellarExplorerUrl } from "../../lib/stellar";
 import { useClipboard } from "../../hooks/useClipboard";
 import { useOptionalToast } from "../toast/ToastProvider";
 import { formatAddress } from "../common/TruncatedAddress";
+import {
+  type ShareProvider,
+  SHARE_WORKSPACES_CHANGED_EVENT,
+  connectWorkspace,
+  disconnectWorkspace,
+  getShareProviderLabel,
+  readConnectedWorkspaces,
+} from "../../lib/shareWorkspaces";
 
 interface WalletStatusProps {
   address: string;

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Menu, X, Type, Search, Command } from "lucide-react";
 import { useWallet } from "../wallet-connect/Walletcontext";
@@ -303,11 +303,30 @@ const location = useLocation();
   const showBreadcrumb = isAppView && breadcrumbs.length > 1;
   const links = connected ? APP_PRIMARY_LINKS : ANON_LINKS;
 
-  const closeMobile = () => setMobileMenuOpen(false);
+  // Anon hamburger — kept as a ref so focus can be deterministically returned
+  // to it whenever the mobile menu closes via keyboard (Escape) or link
+  // activation, instead of being silently dropped to <body>.
+  const hamburgerButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  const closeMobile = useCallback((options?: { restoreFocus?: boolean }) => {
+    setMobileMenuOpen(false);
+    if (options?.restoreFocus) {
+      hamburgerButtonRef.current?.focus();
+    }
+  }, []);
+
+  // Safety net: any route change closes the mobile menu, regardless of
+  // whether it was triggered by clicking a link inside it (browser
+  // back/forward, programmatic navigation, etc. bypass that handler).
+  // This keeps menu state deterministic across rerenders instead of being
+  // contingent on which specific interaction caused the navigation.
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
 
   const handleHeaderKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
     if (e.key === "Escape" && mobileMenuOpen) {
-      closeMobile();
+      closeMobile({ restoreFocus: true });
     }
   };
 
@@ -447,6 +466,7 @@ const location = useLocation();
                In app view the sidebar toggle above the logo handles mobile nav. */}
           {!isAppView && (
             <button
+              ref={hamburgerButtonRef}
               type="button"
               className="md:hidden flex items-center justify-center w-11 h-11 rounded-lg text-[var(--navbar-icon-color)] hover:text-[var(--text)] hover:bg-[var(--surface-elevated)] transition-all outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
               onClick={() => setMobileMenuOpen((prev) => !prev)}
@@ -488,7 +508,7 @@ const location = useLocation();
               key={link.to}
               to={link.to}
               label={link.label}
-              onClick={closeMobile}
+              onClick={() => closeMobile({ restoreFocus: true })}
             />
           ))}
 
@@ -534,13 +554,13 @@ const location = useLocation();
                 isNetworkMismatch={isNetworkMismatch}
                 onDisconnect={() => {
                   disconnect();
-                  closeMobile();
+                  closeMobile({ restoreFocus: true });
                 }}
               />
             ) : (
               <Link
                 to="/connect-wallet"
-                onClick={closeMobile}
+                onClick={() => closeMobile({ restoreFocus: true })}
                 aria-label="Connect your Stellar wallet"
                 className="px-5 h-[44px] rounded-full bg-[var(--cta-bg)] text-white text-sm font-semibold shadow-[var(--cta-shadow)] hover:opacity-90 transition-opacity outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] flex items-center"
               >
