@@ -471,9 +471,13 @@ export const RecipientStreams: React.FC<RecipientStreamsProps> = ({
                   onClick={() => togglePin(stream.id)}
                   className="hover:text-yellow-500 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-md"
                   style={{ color: "var(--color-text-tertiary)" }}
-                  aria-label="Pin stream"
+                  aria-label={stream.isPinned ? "Unpin stream" : "Pin stream"}
+                  aria-pressed={stream.isPinned}
                 >
-                  {stream.isPinned ? "★" : "☆"}
+                  <span aria-hidden="true">{stream.isPinned ? "★" : "☆"}</span>
+                  <span className="ml-1 text-xs font-medium">
+                    {stream.isPinned ? "Pinned" : "Unpinned"}
+                  </span>
                 </button>
               </div>
             </div>
