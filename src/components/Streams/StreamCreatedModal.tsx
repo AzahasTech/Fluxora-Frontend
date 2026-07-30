@@ -1,7 +1,21 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useId, type KeyboardEvent } from "react";
 import styles from "./StreamCreatedModal.module.css";
 import successIcon from "../../assets/images/success.svg";
 import { useModalAccessibility } from "../useModalAccessibility";
+import { useOptionalTheme } from "../../theme/ThemeProvider";
+import { TransactionReceiptPreview } from "../receipt/TransactionReceiptPreview";
+import { useClipboard } from "../../hooks/useClipboard";
+import { useOptionalToast } from "../toast/ToastProvider";
+import { config } from "../../lib/config";
+import {
+  type ShareFlowState,
+  type ShareProvider,
+  MOCK_SHARE_CHANNELS,
+  connectWorkspace,
+  getConnectedWorkspace,
+  getShareProviderLabel,
+  isProviderConnected,
+} from "../../lib/shareWorkspaces";
 
 interface StreamCreatedModalProps {
   isOpen: boolean;
@@ -9,6 +23,14 @@ interface StreamCreatedModalProps {
   streamId: string;
   streamUrl: string;
   onCreateAnother: () => void;
+  txHash?: string;
+  amount?: string;
+  rate?: string;
+  cliff?: string;
+  sender?: string;
+  recipient?: string;
+  /** Test hook: force the next send attempt to fail. */
+  forceShareFailure?: boolean;
 }
 
 export default function StreamCreatedModal({
@@ -17,17 +39,45 @@ export default function StreamCreatedModal({
   streamId,
   streamUrl,
   onCreateAnother,
+  txHash,
+  amount = "10,000.00 USDC",
+  rate = "0.0261 USDC/sec",
+  cliff = "None",
+  sender = "GAB...TREASURY",
+  recipient = "GCD...RECIPIENT",
+  forceShareFailure = false,
 }: StreamCreatedModalProps) {
-  const [copied, setCopied] = useState(false);
+  const { theme } = useOptionalTheme();
+  const { copy, share, status, support } = useClipboard();
+  const toast = useOptionalToast();
   const [announcement, setAnnouncement] = useState("");
   const [isPopupBlocked, setIsPopupBlocked] = useState(false);
+  const [shareProvider, setShareProvider] = useState<ShareProvider | null>(
+    null,
+  );
+  const [shareFlow, setShareFlow] = useState<ShareFlowState>("idle");
+  const [channelQuery, setChannelQuery] = useState("");
+  const [selectedChannelId, setSelectedChannelId] = useState<string | null>(
+    null,
+  );
+  const [listOpen, setListOpen] = useState(false);
+  const [activeOptionIndex, setActiveOptionIndex] = useState(0);
   const modalRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const channelInputRef = useRef<HTMLInputElement>(null);
+  const channelListId = useId();
+  const channelInputId = useId();
+  const previewHeadingId = useId();
 
   useEffect(() => {
     if (isOpen) {
       setAnnouncement("Success! Your USDC stream is now live on Stellar.");
       setIsPopupBlocked(false);
+      setShareProvider(null);
+      setShareFlow("idle");
+      setChannelQuery("");
+      setSelectedChannelId(null);
+      setListOpen(false);
       const timer = setTimeout(() => setAnnouncement(""), 1000);
       return () => clearTimeout(timer);
     }
@@ -42,58 +92,74 @@ export default function StreamCreatedModal({
 
   if (!isOpen) return null;
 
-  const fallbackCopy = (): boolean => {
-    const textarea = document.createElement("textarea");
-    textarea.value = streamUrl;
-    textarea.setAttribute("readonly", "");
-    textarea.style.position = "fixed";
-    textarea.style.left = "-9999px";
-    textarea.style.opacity = "0";
-    document.body.appendChild(textarea);
-    textarea.select();
+  const channels = shareProvider
+    ? MOCK_SHARE_CHANNELS[shareProvider].filter((channel) =>
+        channel.name.toLowerCase().includes(channelQuery.trim().toLowerCase()),
+      )
+    : [];
+  const selectedChannel =
+    shareProvider && selectedChannelId
+      ? MOCK_SHARE_CHANNELS[shareProvider].find(
+          (channel) => channel.id === selectedChannelId,
+        )
+      : undefined;
+  const workspace =
+    shareProvider != null ? getConnectedWorkspace(shareProvider) : undefined;
+  const showPicker =
+    shareFlow === "connected-channel-picker" ||
+    shareFlow === "sending" ||
+    shareFlow === "sent" ||
+    shareFlow === "send-failed";
 
-    try {
-      return document.execCommand("copy");
-    } finally {
-      document.body.removeChild(textarea);
-    }
-  };
-
-  const writeToClipboard = async (): Promise<boolean> => {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(streamUrl);
-      return true;
-    }
-
-    return fallbackCopy();
+  const announce = (message: string, clearMs = 2000) => {
+    setAnnouncement(message);
+    setTimeout(() => setAnnouncement(""), clearMs);
   };
 
   /**
-   * Copies the stream URL to the clipboard and toggles the copied visual state on success.
+   * Copies the stream URL to the clipboard or invokes the native Web Share
+   * API when available. Delegates all clipboard and share logic to the
+   * shared {@link useClipboard} hook so that copy, share, status feedback,
+   * and environment feature detection are handled consistently.
    *
-   * Uses the async Clipboard API when available. In insecure contexts where
-   * `navigator.clipboard` is undefined, falls back to a temporary textarea
-   * with `document.execCommand("copy")`. The URL bar remains visible and
-   * selectable as a manual fallback.
-   *
-   * On failure (permission denied or fallback copy failure), announces an
-   * accessible error via the modal's aria-live region without logging the URL.
-   * The 2s reset timer applies only to the success checkmark state.
+   * - Web Share API (mobile / supported browsers): opens the native
+   *   share sheet. Falls back to clipboard copy when the user cancels or
+   *   the API is unsupported.
+   * - Clipboard: uses {@link useClipboard.copy} which prefers the async
+   *   Clipboard API and falls back to {@code document.execCommand("copy")}
+   *   in older or insecure contexts.
+   * - Announcements are set via {@code setAnnouncement} and cleared with
+   *   automatic timeouts.
    */
-  const handleCopy = async () => {
-    try {
-      const didCopy = await writeToClipboard();
-      if (!didCopy) {
-        throw new Error("Fallback copy command failed");
+  const handleShareOrCopy = async () => {
+    if (status === "sharing") return;
+
+    if (support.share) {
+      const outcome = await share({
+        title: "Stream created",
+        text: "View my Stellar stream and withdraw funds.",
+        url: streamUrl,
+      });
+
+      if (outcome === "shared") {
+        announce("Stream URL shared");
+        return;
       }
 
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setAnnouncement(
+      if (outcome === "cancelled") {
+        announce("Share cancelled");
+        return;
+      }
+    }
+
+    const didCopy = await copy(streamUrl);
+    if (didCopy) {
+      announce("Stream URL copied");
+    } else {
+      announce(
         "Could not copy stream URL. Please select and copy the URL manually.",
+        3000,
       );
-      setTimeout(() => setAnnouncement(""), 3000);
     }
   };
 
@@ -117,14 +183,140 @@ export default function StreamCreatedModal({
     const newWindow = window.open(streamUrl, "_blank", "noopener,noreferrer");
     if (!newWindow) {
       setIsPopupBlocked(true);
-      setAnnouncement("Popup blocked. Please use the fallback link to view your stream.");
+      announce(
+        "Popup blocked. Please use the fallback link to view your stream.",
+        3000,
+      );
     } else {
       setIsPopupBlocked(false);
     }
   };
 
+  const selectShareProvider = (provider: ShareProvider) => {
+    setShareProvider(provider);
+    setChannelQuery("");
+    setSelectedChannelId(null);
+    setListOpen(false);
+    if (isProviderConnected(provider)) {
+      setShareFlow("connected-channel-picker");
+      announce(`${getShareProviderLabel(provider)} workspace ready`);
+    } else {
+      setShareFlow("not-connected");
+      announce(`${getShareProviderLabel(provider)} is not connected`);
+    }
+  };
+
+  const handleConnectWorkspace = () => {
+    if (!shareProvider || shareFlow === "connecting") return;
+    setShareFlow("connecting");
+    announce(`Connecting to ${getShareProviderLabel(shareProvider)}…`);
+
+    window.setTimeout(() => {
+      const connected = connectWorkspace(shareProvider);
+      setShareFlow("connected-channel-picker");
+      toast?.addToast(
+        `${getShareProviderLabel(shareProvider)} workspace connected.`,
+        "success",
+      );
+      announce(
+        `${getShareProviderLabel(shareProvider)} connected to ${connected.workspaceName}`,
+      );
+      requestAnimationFrame(() => channelInputRef.current?.focus());
+    }, 600);
+  };
+
+  const handleSelectChannel = (channelId: string, channelName: string) => {
+    setSelectedChannelId(channelId);
+    setChannelQuery(channelName);
+    setListOpen(false);
+    announce(`Channel ${channelName} selected`);
+  };
+
+  const handleChannelKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (!listOpen && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+      setListOpen(true);
+      setActiveOptionIndex(0);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      setListOpen(false);
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveOptionIndex((index) =>
+        channels.length === 0 ? 0 : (index + 1) % channels.length,
+      );
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveOptionIndex((index) =>
+        channels.length === 0
+          ? 0
+          : (index - 1 + channels.length) % channels.length,
+      );
+      return;
+    }
+
+    if (event.key === "Enter" && listOpen && channels[activeOptionIndex]) {
+      event.preventDefault();
+      const channel = channels[activeOptionIndex];
+      handleSelectChannel(channel.id, channel.name);
+    }
+  };
+
+  const handleSendToChannel = () => {
+    if (
+      !shareProvider ||
+      !selectedChannel ||
+      shareFlow === "sending" ||
+      shareFlow === "connecting"
+    ) {
+      return;
+    }
+
+    setShareFlow("sending");
+    announce(`Sending stream summary to ${selectedChannel.name}…`);
+
+    window.setTimeout(() => {
+      if (forceShareFailure) {
+        setShareFlow("send-failed");
+        toast?.addToast(
+          `Could not share to ${getShareProviderLabel(shareProvider)}. Try again.`,
+          "error",
+        );
+        announce("Share failed. You can try again.");
+        return;
+      }
+
+      setShareFlow("sent");
+      toast?.addToast(
+        `Stream summary shared to ${selectedChannel.name} on ${getShareProviderLabel(shareProvider)}.`,
+        "success",
+      );
+      announce(`Shared to ${selectedChannel.name}`);
+    }, 700);
+  };
+
+  const previewBadge =
+    shareFlow === "sending"
+      ? "Sending…"
+      : shareFlow === "sent"
+        ? "Sent"
+        : shareFlow === "send-failed"
+          ? "Send failed"
+          : "Ready to share";
+
   return (
-    <div className={styles.overlay} onClick={onClose}>
+    <div
+      className={`${styles.overlay}${theme === "cyberpunk" ? ` ${styles.cyberpunkSkin}` : ""}`}
+      onClick={onClose}
+      data-skin={theme === "cyberpunk" ? "cyberpunk" : undefined}
+    >
       <div
         className={styles.modal}
         ref={modalRef}
@@ -185,12 +377,14 @@ export default function StreamCreatedModal({
           <div className={styles.urlContainer}>
             <div className={styles.urlBar}>{streamUrl}</div>
             <button
-              className={`${styles.copyButton} ${copied ? styles.copied : ""}`}
-              onClick={() => void handleCopy()}
+              className={`${styles.copyButton} ${status === "copied" || status === "shared" ? styles.copied : ""}`}
+              onClick={() => void handleShareOrCopy()}
               type="button"
-              aria-label="Copy stream URL"
+              disabled={status === "sharing"}
+              aria-busy={status === "sharing"}
+              aria-label={`${status === "sharing" ? "Sharing" : status === "copied" || status === "shared" ? "Copied" : support.share ? "Share" : "Copy"} stream URL`}
             >
-              {copied ? (
+              {status === "copied" || status === "shared" ? (
                 <svg
                   width="20"
                   height="20"
@@ -202,6 +396,41 @@ export default function StreamCreatedModal({
                   strokeLinejoin="round"
                 >
                   <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              ) : status === "sharing" ? (
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={styles.spinning}
+                >
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    strokeDasharray="32"
+                    strokeDashoffset="10"
+                  ></circle>
+                </svg>
+              ) : support.share ? (
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                  <polyline points="16 6 12 2 8 6"></polyline>
+                  <line x1="12" y1="2" x2="12" y2="15"></line>
                 </svg>
               ) : (
                 <svg
@@ -228,6 +457,223 @@ export default function StreamCreatedModal({
             stream link with your recipient. They can view real-time accrual and
             withdraw funds from the Recipient portal.
           </p>
+        </div>
+
+        <div
+          className={styles.shareSection}
+          role="region"
+          aria-label="Share stream"
+        >
+          <h3 className={styles.shareSectionTitle}>Share with your team</h3>
+          <div
+            className={styles.shareGroup}
+            role="group"
+            aria-label="Share to messaging apps"
+          >
+            <button
+              type="button"
+              className={`${styles.shareButton} ${shareProvider === "slack" ? styles.shareButtonActive : ""}`}
+              aria-pressed={shareProvider === "slack"}
+              disabled={shareFlow === "connecting" || shareFlow === "sending"}
+              onClick={() => selectShareProvider("slack")}
+            >
+              Share to Slack
+            </button>
+            <button
+              type="button"
+              className={`${styles.shareButton} ${shareProvider === "teams" ? styles.shareButtonActive : ""}`}
+              aria-pressed={shareProvider === "teams"}
+              disabled={shareFlow === "connecting" || shareFlow === "sending"}
+              onClick={() => selectShareProvider("teams")}
+            >
+              Share to Teams
+            </button>
+          </div>
+
+          {shareFlow === "not-connected" && shareProvider && (
+            <div className={styles.shareConnectPanel}>
+              <p className={styles.shareConnectState}>
+                Connect {getShareProviderLabel(shareProvider)} once to post
+                stream summaries to a workspace channel. Fluxora only requests
+                channel list and message post scopes.
+              </p>
+              <button
+                type="button"
+                className={styles.shareConnectButton}
+                onClick={handleConnectWorkspace}
+              >
+                Connect {getShareProviderLabel(shareProvider)}
+              </button>
+            </div>
+          )}
+
+          {shareFlow === "connecting" && shareProvider && (
+            <p
+              className={styles.shareConnectState}
+              role="status"
+              aria-live="polite"
+              aria-busy="true"
+            >
+              Connecting to {getShareProviderLabel(shareProvider)}…
+            </p>
+          )}
+
+          {showPicker && shareProvider && (
+            <div className={styles.sharePickerPanel}>
+              {workspace && (
+                <p className={styles.shareWorkspaceHint}>
+                  Connected to {workspace.workspaceName}
+                </p>
+              )}
+
+              <div className={styles.channelPicker}>
+                <label htmlFor={channelInputId} className={styles.channelLabel}>
+                  Channel
+                </label>
+                <div className={styles.channelCombobox}>
+                  <input
+                    ref={channelInputRef}
+                    id={channelInputId}
+                    type="text"
+                    role="combobox"
+                    aria-expanded={listOpen}
+                    aria-controls={channelListId}
+                    aria-autocomplete="list"
+                    aria-activedescendant={
+                      listOpen && channels[activeOptionIndex]
+                        ? `${channelListId}-option-${channels[activeOptionIndex].id}`
+                        : undefined
+                    }
+                    className={styles.channelInput}
+                    placeholder="Search channels"
+                    value={channelQuery}
+                    disabled={shareFlow === "sending"}
+                    onChange={(event) => {
+                      setChannelQuery(event.target.value);
+                      setSelectedChannelId(null);
+                      setListOpen(true);
+                      setActiveOptionIndex(0);
+                    }}
+                    onFocus={() => setListOpen(true)}
+                    onKeyDown={handleChannelKeyDown}
+                  />
+                  {listOpen && (
+                    <ul
+                      id={channelListId}
+                      role="listbox"
+                      className={styles.channelList}
+                      aria-label="Available channels"
+                    >
+                      {channels.length === 0 ? (
+                        <li
+                          className={styles.channelEmpty}
+                          role="presentation"
+                        >
+                          No channels match
+                        </li>
+                      ) : (
+                        channels.map((channel, index) => (
+                          <li
+                            key={channel.id}
+                            id={`${channelListId}-option-${channel.id}`}
+                            role="option"
+                            aria-selected={selectedChannelId === channel.id}
+                            className={`${styles.channelOption} ${index === activeOptionIndex ? styles.channelOptionActive : ""}`}
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              handleSelectChannel(channel.id, channel.name);
+                            }}
+                          >
+                            #{channel.name}
+                          </li>
+                        ))
+                      )}
+                    </ul>
+                  )}
+                </div>
+              </div>
+
+              <article
+                className={styles.sharePreviewCard}
+                aria-labelledby={previewHeadingId}
+              >
+                <div className={styles.sharePreviewHeader}>
+                  <h4 id={previewHeadingId} className={styles.sharePreviewLabel}>
+                    Message preview
+                  </h4>
+                  <span className={styles.shareStatusBadge}>{previewBadge}</span>
+                </div>
+                <dl className={styles.sharePreviewBody}>
+                  <div className={styles.sharePreviewRow}>
+                    <dt>Recipient</dt>
+                    <dd>{recipient}</dd>
+                  </div>
+                  <div className={styles.sharePreviewRow}>
+                    <dt>Rate</dt>
+                    <dd>{rate}</dd>
+                  </div>
+                  <div className={styles.sharePreviewRow}>
+                    <dt>Cliff</dt>
+                    <dd>{cliff}</dd>
+                  </div>
+                  <div className={styles.sharePreviewRow}>
+                    <dt>Stream link</dt>
+                    <dd>
+                      <a
+                        href={streamUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={styles.sharePreviewLink}
+                      >
+                        {streamUrl}
+                      </a>
+                    </dd>
+                  </div>
+                </dl>
+              </article>
+
+              {shareFlow === "send-failed" && (
+                <p className={styles.shareError} role="alert">
+                  Could not post to the selected channel. Check the connection
+                  and try again.
+                </p>
+              )}
+
+              <button
+                type="button"
+                className={styles.shareSendButton}
+                disabled={!selectedChannel || shareFlow === "sending"}
+                aria-busy={shareFlow === "sending"}
+                onClick={handleSendToChannel}
+              >
+                {shareFlow === "sending"
+                  ? "Sending…"
+                  : shareFlow === "sent"
+                    ? "Sent"
+                    : shareFlow === "send-failed"
+                      ? "Retry send"
+                      : "Send to channel"}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Transaction Receipt Preview & Download Button */}
+        <div className="my-4">
+          <TransactionReceiptPreview
+            data={{
+              streamId,
+              type: "Creation",
+              sender,
+              recipient,
+              amount,
+              rate,
+              timestamp: new Date().toISOString(),
+              txHash: txHash || null,
+              status: txHash ? "confirmed" : "pending",
+              network: config.networkLabel,
+            }}
+          />
         </div>
 
         {isPopupBlocked && (
