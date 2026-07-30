@@ -1,13 +1,23 @@
 import React from "react";
 import "./skeleton.css";
 
-/** Stable selectors for loading-state roots; keep accessible roles as well. */
-export const LOADING_TEST_IDS = {
-  block: "loading-skeleton-block",
-  streams: "loading-skeleton-streams",
-  treasury: "loading-skeleton-treasury",
-  recipient: "loading-skeleton-recipient",
-} as const;
+export const MAX_LOADING_RETRIES = 3;
+
+export function LoadingRetryState({
+  label,
+  onRetry,
+}: {
+  label: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <div role="alert" aria-live="assertive" className="loading-retry-state">
+      <strong>We couldn&apos;t load {label}.</strong>
+      <span>Automatic retries have stopped.</span>
+      {onRetry && <button type="button" onClick={onRetry}>Try again</button>}
+    </div>
+  );
+}
 
 interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
   width?: string | number;

@@ -21,6 +21,7 @@ export interface TreasuryData {
   loading: boolean;
   error: string | null;
   refetch: () => void;
+  retryCount: number;
 }
 
 const GENERIC_ERROR = "Unable to load treasury data.";
@@ -48,6 +49,7 @@ export function useTreasury(filters?: StreamsFilters): TreasuryData {
   const [streams, setStreams] = useState<StreamRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   const [reloadToken, setReloadToken] = useState(0);
   const filtersKey = serializeFilters(filters);
   const inFlightRef = useRef<number>(0);
@@ -60,6 +62,7 @@ export function useTreasury(filters?: StreamsFilters): TreasuryData {
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setRetryCount((count) => count + 1);
 
     Promise.all([getTreasuryMetrics(), getStreams(filtersRef.current)])
       .then(([nextMetrics, nextStreams]) => {
@@ -99,6 +102,7 @@ export function useTreasury(filters?: StreamsFilters): TreasuryData {
         setMetrics(updatedMetrics);
         setStreams(nextStreams);
         setError(null);
+        setRetryCount(0);
         setLoading(false);
       })
       .catch((cause) => {
@@ -118,7 +122,7 @@ export function useTreasury(filters?: StreamsFilters): TreasuryData {
     setReloadToken((token) => token + 1);
   }, []);
 
-  return { metrics, streams, loading, error, refetch };
+  return { metrics, streams, loading, error, refetch, retryCount };
 }
 
 /**
@@ -137,6 +141,7 @@ export function useRecipientStreams(address: string | null | undefined): {
   const [streams, setStreams] = useState<StreamRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(Boolean(address));
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   const [reloadToken, setReloadToken] = useState(0);
   const inFlightRef = useRef<number>(0);
 
@@ -152,12 +157,14 @@ export function useRecipientStreams(address: string | null | undefined): {
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setRetryCount((count) => count + 1);
 
     getRecipientStreams(address)
       .then((next) => {
         if (cancelled || runId !== inFlightRef.current) return;
         setStreams(next);
         setError(null);
+        setRetryCount(0);
         setLoading(false);
       })
       .catch((cause) => {
@@ -176,7 +183,7 @@ export function useRecipientStreams(address: string | null | undefined): {
     setReloadToken((token) => token + 1);
   }, []);
 
-  return { streams, loading, error, refetch };
+  return { streams, loading, error, refetch, retryCount };
 }
 
 function serializeFilters(filters?: StreamsFilters): string {

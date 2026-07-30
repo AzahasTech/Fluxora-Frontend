@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import RecipientEmptyState from "../components/RecipientEmptyState";
 import { RecipientStreams, type Stream } from "../components/recipient/RecipientStreams";
 import RecipientLoading from "../components/RecipientLoading";
+import { MAX_LOADING_RETRIES } from "../components/Skeleton";
 import ZeroAccrualBanner from "../components/ZeroAccrualBanner";
 import { useWallet } from "../components/wallet-connect/Walletcontext";
 import { useToast } from "../components/toast/ToastProvider";
@@ -650,7 +651,14 @@ export default function Recipient() {
     }
   };
 
-  if (pageLoading) return <RecipientLoading />;
+  if (pageLoading || (recipientStreams.error && recipientStreams.retryCount >= MAX_LOADING_RETRIES)) {
+    return (
+      <RecipientLoading
+        retryCount={recipientStreams.retryCount}
+        onRetry={handlePageRefetch}
+      />
+    );
+  }
 
   // Show empty-state path when:
   //   - wallet is disconnected, OR

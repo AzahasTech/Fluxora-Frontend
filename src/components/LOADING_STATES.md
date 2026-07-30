@@ -1,15 +1,8 @@
-# Loading-state selectors
+# Loading retry cutoff
 
-Loading surfaces keep their accessible `role="status"` and accessible label.
-Tests that need a stable DOM hook should select the root `data-testid` from the
-shared `LOADING_TEST_IDS` map in `Skeleton.tsx`:
-
-| Surface | Selector |
-| --- | --- |
-| Shared block | `loading-skeleton-block` |
-| Streams page | `loading-skeleton-streams` |
-| Treasury overview | `loading-skeleton-treasury` |
-| Recipient portal | `loading-skeleton-recipient` |
-
-The selectors describe loading context, not individual visual rectangles. Do
-not add test IDs to replace semantic queries for status announcements.
+The loading surfaces share `MAX_LOADING_RETRIES` (three attempts) and
+`LoadingRetryState` from `Skeleton.tsx`. Data hooks expose `retryCount`; after
+the cutoff, the page renders an assertive error state with a manual **Try
+again** action. A manual retry starts a new request and keeps the same shared
+counter, so a persistently unavailable service cannot leave a skeleton on
+screen indefinitely.

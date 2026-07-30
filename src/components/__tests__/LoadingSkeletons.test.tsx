@@ -1,11 +1,19 @@
 import { render, screen } from "@testing-library/react";
-import { describe, it, expect } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, it, expect, vi } from "vitest";
 import StreamsLoading from "../StreamsLoading";
 import TreasuryOverviewLoading from "../TreasuryOverviewLoading";
 import RecipientLoading from "../RecipientLoading";
 import { LOADING_TEST_IDS } from "../Skeleton";
 
 describe("StreamsLoading", () => {
+  it("escalates after the shared retry cutoff and offers manual retry", async () => {
+    const onRetry = vi.fn();
+    render(<StreamsLoading retryCount={3} onRetry={onRetry} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Automatic retries have stopped");
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
   it("has role=status with correct aria-label and aria-busy", () => {
     render(<StreamsLoading />);
     const region = screen.getByRole("status");
