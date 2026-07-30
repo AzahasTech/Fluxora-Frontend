@@ -104,6 +104,19 @@ than hardcoded colour literals or pixel values. Common tokens:
 
 ---
 
+## CSS Modules and component boundaries
+
+- Keep component-only styles in a colocated CSS Module or stylesheet; do not
+  add selectors to a global file unless they are shared by multiple components.
+- Use the design tokens above from CSS Modules and avoid hardcoded colors,
+  spacing, typography, or motion values.
+- Keep data fetching in API hooks/services and keep presentational components
+  focused on rendering and user interaction.
+- Reuse shared primitives such as `VirtualList`, `EmptyState`, and the wallet
+  provider before adding a parallel implementation.
+
+---
+
 ## Wallet state
 
 Read wallet address and network exclusively through `useWallet()` from
