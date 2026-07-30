@@ -1,10 +1,10 @@
-import { Skeleton, SkeletonCard } from "./Skeleton";
+import { LOADING_TEST_IDS, Skeleton, SkeletonCard } from "./Skeleton";
 import "./skeleton.css";
 
 /** Skeleton for the full Dashboard / Treasury overview surface. */
 export default function TreasuryOverviewLoading() {
   return (
-    <div role="status" aria-label="Loading treasury overview" aria-busy="true">
+    <div data-testid={LOADING_TEST_IDS.treasury} role="status" aria-label="Loading treasury overview" aria-busy="true">
       <span className="sr-only">Loading treasury overview…</span>
 
       {/* Page header */}

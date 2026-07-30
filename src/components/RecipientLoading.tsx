@@ -1,10 +1,10 @@
-import { Skeleton, SkeletonCard } from "./Skeleton";
+import { LOADING_TEST_IDS, Skeleton, SkeletonCard } from "./Skeleton";
 import "./skeleton.css";
 
 /** Skeleton for the Recipient portal balance card + stats row. */
 export default function RecipientLoading() {
   return (
-    <div role="status" aria-label="Loading recipient portal" aria-busy="true">
+    <div data-testid={LOADING_TEST_IDS.recipient} role="status" aria-label="Loading recipient portal" aria-busy="true">
       <span className="sr-only">Loading your streams…</span>
 
       {/* Page header */}

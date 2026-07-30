@@ -1,10 +1,10 @@
-import { Skeleton, SkeletonCard } from "./Skeleton";
+import { LOADING_TEST_IDS, Skeleton, SkeletonCard } from "./Skeleton";
 import "./skeleton.css";
 
 /** Skeleton for the Streams page table surface. */
 export default function StreamsLoading() {
   return (
-    <div role="status" aria-label="Loading streams" aria-busy="true">
+    <div data-testid={LOADING_TEST_IDS.streams} role="status" aria-label="Loading streams" aria-busy="true">
       <span className="sr-only">Loading streams…</span>
 
       {/* Page header */}
