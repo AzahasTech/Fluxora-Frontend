@@ -126,14 +126,16 @@ describe('CreateStreamModal validation edge cases', () => {
       { target: { value: '100' } },
     );
 
-    fireEvent.click(within(container).getByRole('button', { name: /wizard/i }));
+    const wizardBtn = within(container).getByRole('radio', { name: /wizard/i });
+    fireEvent.click(wizardBtn);
 
     fireEvent.change(
       container.querySelector('#create-stream-accrual-rate') as HTMLInputElement,
       { target: { value: '' } },
     );
 
-    fireEvent.click(within(container).getByRole('button', { name: /advanced/i }));
+    const advancedBtn = within(container).getByRole('radio', { name: /advanced/i });
+    fireEvent.click(advancedBtn);
 
     fireEvent.change(
       container.querySelector('#create-stream-duration') as HTMLInputElement,

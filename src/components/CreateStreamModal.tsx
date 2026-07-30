@@ -554,35 +554,34 @@ export default function CreateStreamModal({
   };
 
   const validateStep1 = (): boolean => {
-    const newErrors: Record<string, string> = {};
+    const fieldErrors: Record<string, string> = {};
     
     if (!recipient.trim()) {
-      newErrors.recipient = t("createStream.validation.recipientRequired");
-    }
-    const normalizedRecipient = recipient.trim();
-
-    if (wallet.connected && wallet.address && normalizedRecipient.toLowerCase() === wallet.address.toLowerCase()) {
-      newErrors.recipient = "Recipient cannot be the same as the connected wallet address.";
-    }
-
-    if (!isValidStellarAddress(normalizedRecipient)) {
-      newErrors.recipient = t("createStream.validation.recipientInvalid");
+      fieldErrors.recipient = t("createStream.validation.recipientRequired");
+    } else {
+      const normalizedRecipient = recipient.trim();
+      
+      if (wallet.connected && wallet.address && normalizedRecipient.toLowerCase() === wallet.address.toLowerCase()) {
+        fieldErrors.recipient = "Recipient cannot be the same as the connected wallet address.";
+      } else if (!isValidStellarAddress(normalizedRecipient)) {
+        fieldErrors.recipient = t("createStream.validation.recipientInvalid");
+      }
     }
     
     const amount = parseFloat(depositAmount.replace(/,/g, ""));
     if (!depositAmount.trim() || isNaN(amount) || amount <= 0) {
-      newErrors.depositAmount = t("createStream.validation.depositPositive");
+      fieldErrors.depositAmount = t("createStream.validation.depositPositive");
     }
 
     if (contrastState === 'AA-fail-blocked') {
-      newErrors.labelColor = "Please select a high-contrast label color or check 'Use anyway' to proceed.";
+      fieldErrors.labelColor = "Please select a high-contrast label color or check 'Use anyway' to proceed.";
     }
 
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    setErrors(fieldErrors);
+    return Object.keys(fieldErrors).length === 0;
   };
 
-  const validateStep2 = (): boolean => {
+  const validateStep2 = (): Record<string, string> => {
     // Mark all active step-2 fields as touched
     const touchedFields: Record<string, boolean> = {
       accrualRate: true,
@@ -596,59 +595,60 @@ export default function CreateStreamModal({
     }
     setTouched(prev => ({ ...prev, ...touchedFields }));
 
-    if (validateAccrualRate(accrualRate, t)) {
-      return false;
+    const fieldErrors: Record<string, string> = {};
+
+    const rateError = validateAccrualRate(accrualRate, t);
+    if (rateError) {
+      fieldErrors.accrualRate = rateError;
     }
-    if (validateDuration(duration, t)) {
-      return false;
+
+    const durationError = validateDuration(duration, t);
+    if (durationError) {
+      fieldErrors.duration = durationError;
     }
-    if (
-      !Number.isFinite(requiredDepositValue) ||
-      requiredDepositValue > MAX_REQUIRED_DEPOSIT
-    ) {
-      return false;
+
+    if (!Number.isFinite(requiredDepositValue) || requiredDepositValue > MAX_REQUIRED_DEPOSIT) {
+      fieldErrors.deposits = "Required deposit exceeds maximum allowed amount.";
     }
-    // Validate deposit balance
     if (parseFloat(requiredDeposit) > userDeposit) {
-      return false;
+      fieldErrors.deposits = "Required deposit exceeds available balance.";
     }
-    // Validate custom start date
+
     if (startTimeOption === 'custom') {
       if (!customStartDate) {
-        return false;
-      }
-      if (isDateTimeInPast(customStartDate)) {
-        return false;
+        fieldErrors.customStartDate = t("createStream.validation.startDateRequired");
+      } else if (isDateTimeInPast(customStartDate)) {
+        fieldErrors.customStartDate = t("createStream.validation.startDateFuture");
       }
     }
-    // Validate cliff date
+
     if (cliffEnabled) {
       if (!cliffDate) {
-        return false;
-      }
-      if (isDateTimeInPast(cliffDate)) {
-        return false;
-      }
-      if (startTimeOption === 'custom' && customStartDate) {
-        if (isBeforeLocalDateTime(cliffDate, customStartDate)) {
-          return false;
+        fieldErrors.cliffDate = t("createStream.validation.cliffDateRequired");
+      } else if (isDateTimeInPast(cliffDate)) {
+        fieldErrors.cliffDate = t("createStream.validation.cliffDatePast");
+      } else if (startTimeOption === 'custom' && customStartDate && isBeforeLocalDateTime(cliffDate, customStartDate)) {
+        fieldErrors.cliffDate = t("createStream.validation.cliffDateAfterStart");
+      } else {
+        // Cross-field: cliff must not exceed stream end date
+        const selectedCliffDate = new Date(cliffDate);
+        const startMs = startTimeOption === 'custom' && customStartDate
+          ? new Date(customStartDate).getTime()
+          : Date.now();
+        const endDate = computeStreamEndDate(new Date(startMs), parseFloat(duration));
+        if (endDate && validateCliffBeforeEnd(selectedCliffDate, endDate) !== null) {
+          fieldErrors.cliffDate = validateCliffBeforeEnd(selectedCliffDate, endDate) || "Cliff date must be before stream end date";
         }
       }
-      // Cross-field: cliff must not exceed stream end date
-      const selectedCliffDate = new Date(cliffDate);
-      const startMs = startTimeOption === 'custom' && customStartDate
-        ? new Date(customStartDate).getTime()
-        : Date.now();
-      const endDate = computeStreamEndDate(new Date(startMs), parseFloat(duration));
-      if (endDate && validateCliffBeforeEnd(selectedCliffDate, endDate) !== null) {
-        return false;
-      }
     }
-    return true;
+
+    setErrors(prev => ({ ...prev, ...fieldErrors }));
+    return fieldErrors;
   };
 
   /** Combined validation for Advanced mode: runs all field validators at once. */
   const validateAllFields = (): boolean => {
+    setError(null);
     setTouched(prev => ({
       ...prev,
       recipient: true,
@@ -659,19 +659,81 @@ export default function CreateStreamModal({
       ...(cliffEnabled ? { cliffDate: true } : {}),
     }));
 
-    const recipientError = !recipient.trim() || (wallet.connected && wallet.address && recipient.trim().toLowerCase() === wallet.address.toLowerCase()) || !isValidStellarAddress(recipient.trim());
-    const depositError = !depositAmount.trim() || isNaN(parseFloat(depositAmount.replace(/,/g, ''))) || parseFloat(depositAmount.replace(/,/g, '')) <= 0;
-    const rateError = Boolean(validateAccrualRate(accrualRate, t));
-    const durationError = Boolean(validateDuration(duration, t));
-    const depositTooLarge = !Number.isFinite(requiredDepositValue) || requiredDepositValue > MAX_REQUIRED_DEPOSIT || parseFloat(requiredDeposit) > userDeposit;
-    const customDateError = startTimeOption === 'custom' && (!customStartDate || isDateTimeInPast(customStartDate));
-    const cliffError = cliffEnabled && (!cliffDate || isDateTimeInPast(cliffDate) || (startTimeOption === 'custom' && customStartDate && isBeforeLocalDateTime(cliffDate, customStartDate)));
+    const step1Errors: Record<string, string> = {};
+    const step2Errors: Record<string, string> = {};
 
-    if (recipientError || depositError || rateError || durationError || depositTooLarge || customDateError || cliffError) {
+    // Step 1 validations
+    if (!recipient.trim()) {
+      step1Errors.recipient = t("createStream.validation.recipientRequired");
+    } else {
+      const normalizedRecipient = recipient.trim();
+      
+      if (wallet.connected && wallet.address && normalizedRecipient.toLowerCase() === wallet.address.toLowerCase()) {
+        step1Errors.recipient = "Recipient cannot be the same as the connected wallet address.";
+      } else if (!isValidStellarAddress(normalizedRecipient)) {
+        step1Errors.recipient = t("createStream.validation.recipientInvalid");
+      }
+    }
+    
+    const amount = parseFloat(depositAmount.replace(/,/g, ""));
+    if (!depositAmount.trim() || isNaN(amount) || amount <= 0) {
+      step1Errors.depositAmount = t("createStream.validation.depositPositive");
+    }
+
+    // Step 2 validations
+    if (validateAccrualRate(accrualRate, t)) {
+      step2Errors.accrualRate = validateAccrualRate(accrualRate, t);
+    }
+    if (validateDuration(duration, t)) {
+      step2Errors.duration = validateDuration(duration, t);
+    }
+    if (!Number.isFinite(requiredDepositValue) || requiredDepositValue > MAX_REQUIRED_DEPOSIT) {
+      step2Errors.deposits = "Required deposit exceeds maximum allowed amount.";
+    }
+    if (parseFloat(requiredDeposit) > userDeposit) {
+      step2Errors.deposits = "Required deposit exceeds available balance.";
+    }
+    
+    if (startTimeOption === 'custom') {
+      if (!customStartDate) {
+        step2Errors.customStartDate = t("createStream.validation.startDateRequired");
+      } else if (isDateTimeInPast(customStartDate)) {
+        step2Errors.customStartDate = t("createStream.validation.startDateFuture");
+      }
+    }
+    
+    if (cliffEnabled) {
+      if (!cliffDate) {
+        step2Errors.cliffDate = t("createStream.validation.cliffDateRequired");
+      } else if (isDateTimeInPast(cliffDate)) {
+        step2Errors.cliffDate = t("createStream.validation.cliffDatePast");
+      } else if (startTimeOption === 'custom' && customStartDate && isBeforeLocalDateTime(cliffDate, customStartDate)) {
+        step2Errors.cliffDate = t("createStream.validation.cliffDateAfterStart");
+      } else {
+        // Cross-field: cliff must not exceed stream end date
+        const selectedCliffDate = new Date(cliffDate);
+        const startMs = startTimeOption === 'custom' && customStartDate
+          ? new Date(customStartDate).getTime()
+          : Date.now();
+        const endDate = computeStreamEndDate(new Date(startMs), parseFloat(duration));
+        if (endDate && validateCliffBeforeEnd(selectedCliffDate, endDate) !== null) {
+          step2Errors.cliffDate = validateCliffBeforeEnd(selectedCliffDate, endDate) || "Cliff date must be before stream end date";
+        }
+      }
+    }
+
+    const hasStep1Errors = Object.keys(step1Errors).length > 0;
+    const hasStep2Errors = Object.keys(step2Errors).length > 0;
+    const hasGeneralError = contrastState === 'AA-fail-blocked';
+    
+    setErrors(step1Errors);
+
+    if (step2Errors.accrualRate || step2Errors.duration || step2Errors.deposits || step2Errors.customStartDate || step2Errors.cliffDate) {
+      setErrors(prev => ({ ...prev, ...step2Errors }));
       return false;
     }
 
-    if (contrastState === 'AA-fail-blocked') {
+    if (hasGeneralError) {
       setError("Please select a high-contrast label color or check 'Use anyway' to proceed.");
       return false;
     }
@@ -718,7 +780,8 @@ export default function CreateStreamModal({
       return;
     }
     if (currentStep === 2) {
-      if (!validateStep2()) return;
+      const step2Errors = validateStep2();
+      if (Object.keys(step2Errors).length > 0) return;
       resetTransactionState();
       setCurrentStep(3);
     } else if (currentStep === 3) {
