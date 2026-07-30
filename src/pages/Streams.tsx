@@ -1,5 +1,7 @@
 import {
+  lazy,
   memo,
+  Suspense,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -11,7 +13,7 @@ import {
 } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useI18n } from "../i18n";
-import CreateStreamModal from "../components/CreateStreamModal";
+const CreateStreamModal = lazy(() => import("../components/CreateStreamModal"));
 import type { StreamCreatedData } from "../components/CreateStreamModal";
 import EmptyState from "../components/EmptyState";
 import StreamCreatedModal from "../components/Streams/StreamCreatedModal";
@@ -1175,13 +1177,15 @@ export default function Streams() {
           onCreateStream={handleCreateStream}
         />
 
-        <CreateStreamModal
-          isOpen={isCreateModalOpen}
-          onClose={handleCloseCreateModal}
-          onStreamCreated={handleStreamCreated}
-          initialDraft={restoredDraft}
-          onDraftChange={setLiveDraft}
-        />
+        <Suspense fallback={null}>
+          <CreateStreamModal
+            isOpen={isCreateModalOpen}
+            onClose={handleCloseCreateModal}
+            onStreamCreated={handleStreamCreated}
+            initialDraft={restoredDraft}
+            onDraftChange={setLiveDraft}
+          />
+        </Suspense>
         <CreateStreamFab
           onCreateStream={handleCreateStream}
           hidden={isCreateModalOpen}
@@ -1424,13 +1428,15 @@ export default function Streams() {
         </>
       )}
 
-      <CreateStreamModal
-        isOpen={isCreateModalOpen}
-        onClose={handleCloseCreateModal}
-        onStreamCreated={handleStreamCreated}
-        initialDraft={restoredDraft}
-        onDraftChange={setLiveDraft}
-      />
+      <Suspense fallback={null}>
+        <CreateStreamModal
+          isOpen={isCreateModalOpen}
+          onClose={handleCloseCreateModal}
+          onStreamCreated={handleStreamCreated}
+          initialDraft={restoredDraft}
+          onDraftChange={setLiveDraft}
+        />
+      </Suspense>
       <CreateStreamFab
         onCreateStream={handleCreateStream}
         hidden={isCreateModalOpen || isSuccessModalOpen}
