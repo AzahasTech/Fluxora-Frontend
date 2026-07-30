@@ -8,6 +8,9 @@ export interface InputFieldProps {
   error?: string;
   helperText?: string;
   success?: boolean;
+  /** Optional value validator used for inline validation while typing. */
+  validate?: (value: string) => string | undefined;
+  validationDebounceMs?: number;
   /** Defers error styling and live announcements until compositionend. */
   compositionAware?: boolean;
   children: React.ReactNode;
@@ -20,13 +23,18 @@ export const InputField: React.FC<InputFieldProps> = ({
   error,
   helperText,
   success,
+  validate,
+  validationDebounceMs = 300,
   compositionAware = true,
   children,
 }) => {
   const [isComposing, setIsComposing] = React.useState(false);
+  const [validatedError, setValidatedError] = React.useState(error);
+  const validationTimer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const activeError = validate ? validatedError : error;
   // Determine which message (if any) is active
-  const hasError = Boolean(error) && !(compositionAware && isComposing);
-  const hasHint = Boolean(helperText);
+  const hasError = Boolean(activeError) && !(compositionAware && isComposing);
+  const hasHint = Boolean(helperText) && !hasError;
   const hasSuccess = success === true && !hasError;
 
   // Build the id for the active ValidationMessage
@@ -44,8 +52,27 @@ export const InputField: React.FC<InputFieldProps> = ({
   // Clone the child element to inject ARIA props onto the underlying <input>
   const child = React.Children.only(children) as React.ReactElement;
   const childProps = child.props as {
+    onChange?: (event: React.ChangeEvent<HTMLElement>) => void;
+    onBlur?: (event: React.FocusEvent<HTMLElement>) => void;
     onCompositionStart?: (event: React.CompositionEvent<HTMLElement>) => void;
     onCompositionEnd?: (event: React.CompositionEvent<HTMLElement>) => void;
+  };
+  React.useEffect(() => {
+    if (!validate) setValidatedError(error);
+    return () => {
+      if (validationTimer.current) clearTimeout(validationTimer.current);
+    };
+  }, [error, validate]);
+
+  const handleValidation = (value: string, immediate = false) => {
+    if (!validate) return;
+    if (validationTimer.current) clearTimeout(validationTimer.current);
+    const nextError = validate(value);
+    if (!nextError || immediate) {
+      setValidatedError(nextError);
+      return;
+    }
+    validationTimer.current = setTimeout(() => setValidatedError(nextError), validationDebounceMs);
   };
   const clonedChild = React.cloneElement(child, {
     id,
@@ -53,6 +80,14 @@ export const InputField: React.FC<InputFieldProps> = ({
     ...(required ? { 'aria-required': 'true' } : {}),
     ...(messageId ? { 'aria-describedby': messageId } : {}),
     'data-composing': compositionAware && isComposing ? 'true' : undefined,
+    onChange: (event: React.ChangeEvent<HTMLElement>) => {
+      childProps.onChange?.(event);
+      handleValidation((event.currentTarget as HTMLInputElement).value);
+    },
+    onBlur: (event: React.FocusEvent<HTMLElement>) => {
+      childProps.onBlur?.(event);
+      handleValidation((event.currentTarget as HTMLInputElement).value, true);
+    },
     onCompositionStart: (event: React.CompositionEvent<HTMLElement>) => {
       childProps.onCompositionStart?.(event);
       if (compositionAware) setIsComposing(true);
@@ -77,7 +112,7 @@ export const InputField: React.FC<InputFieldProps> = ({
       </div>
 
       {hasError && (
-        <ValidationMessage id={`${id}-error`} message={error!} type="error" />
+        <ValidationMessage id={`${id}-error`} message={activeError!} type="error" />
       )}
       {hasHint && (
         <ValidationMessage id={`${id}-hint`} message={helperText!} type="hint" />
