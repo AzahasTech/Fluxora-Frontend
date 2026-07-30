@@ -1,6 +1,14 @@
 import React from "react";
 import "./skeleton.css";
 
+/** Stable selectors for loading-state roots; keep accessible roles as well. */
+export const LOADING_TEST_IDS = {
+  block: "loading-skeleton-block",
+  streams: "loading-skeleton-streams",
+  treasury: "loading-skeleton-treasury",
+  recipient: "loading-skeleton-recipient",
+} as const;
+
 interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
   width?: string | number;
   height?: string | number;
