@@ -284,6 +284,24 @@ describe("RecipientStreams — populated state", () => {
   });
 });
 
+describe("RecipientStreams — large lists", () => {
+  it("virtualizes incoming streams once the list exceeds 50 items", async () => {
+    const streams = Array.from({ length: 60 }, (_, index) => ({
+      ...activeStream,
+      id: `stream-${index}`,
+      senderName: `Sender ${index}`,
+    }));
+
+    render(<RecipientStreams streams={streams} pollIntervalMs={0} />);
+
+    const list = await screen.findByRole("list", { name: "Incoming streams" });
+    expect(list).toHaveAttribute("data-virtualized", "true");
+    expect(list.querySelectorAll('[role="listitem"]').length).toBeLessThan(
+      streams.length,
+    );
+  });
+});
+
 // ─── 6. Keyboard accessibility on pin button ──────────────────────────────────
 
 describe("RecipientStreams — keyboard accessibility", () => {

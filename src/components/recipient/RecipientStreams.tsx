@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import EmptyState from "../EmptyState";
 import { Skeleton, SkeletonCard } from "../Skeleton";
+import VirtualList from "../VirtualList";
 import "../skeleton.css";
 
 // Types matching stream properties across testing matrix & app contracts
@@ -425,10 +426,15 @@ export const RecipientStreams: React.FC<RecipientStreamsProps> = ({
         </div>
       ) : (
         /* State 4: Populated State */
-        <div className="space-y-3">
-          {sortedStreams.map((stream) => (
+        <VirtualList
+          items={sortedStreams}
+          getKey={(stream) => stream.id}
+          ariaLabel="Incoming streams"
+          className="space-y-3"
+          estimateSize={96}
+          threshold={50}
+          renderItem={(stream) => (
             <div
-              key={stream.id}
               className="p-4 rounded-xl flex justify-between items-center"
               style={{ border: "1px solid var(--color-border-default)" }}
             >
@@ -471,8 +477,8 @@ export const RecipientStreams: React.FC<RecipientStreamsProps> = ({
                 </button>
               </div>
             </div>
-          ))}
-        </div>
+          )}
+        />
       )}
     </div>
   );
