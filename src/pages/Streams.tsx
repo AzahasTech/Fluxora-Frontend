@@ -19,6 +19,7 @@ import EmptyState from "../components/EmptyState";
 import StreamCreatedModal from "../components/Streams/StreamCreatedModal";
 import { useToast } from "../components/toast/ToastProvider";
 import StreamsLoading from "../components/StreamsLoading";
+import { MAX_LOADING_RETRIES } from "../components/Skeleton";
 import Input from "../components/Input";
 import ZeroAccrualBanner from "../components/ZeroAccrualBanner";
 import SessionRecoveryBanner, {
@@ -801,7 +802,7 @@ export default function Streams() {
   const { t } = useI18n();
   const hasMountedFilterAnnouncer = useRef(false);
 
-  const { streams, loading, error, refetch } = useTreasury();
+  const { streams, loading, error, refetch, retryCount } = useTreasury();
   const filterLabels: Record<StatusFilter, string> = {
     All: t("streams.filter.all"),
     Active: t("streams.filter.active"),
@@ -1148,7 +1149,9 @@ export default function Streams() {
     [announce],
   );
 
-  if (loading) return <StreamsLoading />;
+  if (loading || (error && retryCount >= MAX_LOADING_RETRIES)) {
+    return <StreamsLoading retryCount={retryCount} onRetry={refetch} />;
+  }
 
   if (error) {
     return (
