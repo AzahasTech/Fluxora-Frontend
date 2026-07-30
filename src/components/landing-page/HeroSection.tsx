@@ -183,9 +183,9 @@ export default function HeroSection({ theme = "light" }: HeroSectionProps) {
           >
             {/* Hero Illustration */}
             <img
-              src="/src/assets/dashboard.png"
-              srcSet="/src/assets/dashboard-640w.png 640w, /src/assets/dashboard-768w.png 768w, /src/assets/dashboard-1024w.png 1024w, /src/assets/dashboard-1280w.png 1280w, /src/assets/dashboard-1536w.png 1536w"
-              sizes="(max-width: 1024px) 100vw, 50vw"
+              src="/src/assets/dashboard-1024w.png"
+              srcSet="/src/assets/dashboard-640w.png 640w, /src/assets/dashboard-768w.png 768w, /src/assets/dashboard-1024w.png 1024w, /src/assets/dashboard-1280w.png 1280w, /src/assets/dashboard-1536w.png 1536w, /src/assets/dashboard-2048w.png 2048w"
+              sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 600px"
               alt="Fluxora dashboard showing active treasury streams and analytics"
               loading="eager"
               fetchPriority="high"
