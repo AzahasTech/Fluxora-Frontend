@@ -273,6 +273,9 @@ export default function ConnectWalletModal({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (isRequestInFlight.current) {
+          return;
+        }
         onClose();
         return;
       }

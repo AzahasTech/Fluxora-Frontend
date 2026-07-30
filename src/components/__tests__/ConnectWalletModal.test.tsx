@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import React, { act } from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import ConnectWalletModal, { type ConnectWalletModalProps } from "../ConnectWalletModal";
-import { getNetwork } from "@stellar/freighter-api";
+import { getNetwork, isConnected } from "@stellar/freighter-api";
 import { BREAKPOINT_MD, VIEWPORT_RESIZE_DEBOUNCE_MS } from "../../lib/breakpoints";
 vi.mock("@stellar/freighter-api", () => {
   return {
@@ -93,6 +93,18 @@ describe("ConnectWalletModal", () => {
     const backdrop = screen.getByTestId("connect-wallet-backdrop");
     await userEvent.click(backdrop);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores Escape while a Freighter connection is pending", () => {
+    (isConnected as ReturnType<typeof vi.fn>).mockReturnValue(new Promise(() => {}));
+
+    render(<ConnectWalletModal isOpen={true} onClose={onClose} />);
+
+    fireEvent.click(screen.getByRole("listitem", { name: "Connect with Freighter" }));
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByText("Connecting...")).toBeInTheDocument();
   });
 
   it("renders 'not_installed' error state with correct copy, links, and actions", async () => {
