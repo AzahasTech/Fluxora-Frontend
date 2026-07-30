@@ -240,7 +240,7 @@ export default function EmptyState({
     effectiveVariant === "search-no-results"
       ? onClearFilters ?? onPrimaryAction
       : effectiveVariant === "error"
-      ? onRetry ?? onPrimaryAction
+      ? onPrimaryAction ?? onRetry
       : onPrimaryAction;
 
   return (
