@@ -712,11 +712,13 @@ export default function CreateStreamModal({
     }
 
     // Step 2 validations
-    if (validateAccrualRate(accrualRate, t)) {
-      step2Errors.accrualRate = validateAccrualRate(accrualRate, t);
+    const accrualRateError = validateAccrualRate(accrualRate, t);
+    if (accrualRateError) {
+      step2Errors.accrualRate = accrualRateError;
     }
-    if (validateDuration(duration, t)) {
-      step2Errors.duration = validateDuration(duration, t);
+    const durationError = validateDuration(duration, t);
+    if (durationError) {
+      step2Errors.duration = durationError;
     }
     if (!Number.isFinite(requiredDepositValue) || requiredDepositValue > MAX_REQUIRED_DEPOSIT) {
       step2Errors.deposits = "Required deposit exceeds maximum allowed amount.";
@@ -753,8 +755,6 @@ export default function CreateStreamModal({
       }
     }
 
-    const hasStep1Errors = Object.keys(step1Errors).length > 0;
-    const hasStep2Errors = Object.keys(step2Errors).length > 0;
     const hasGeneralError = contrastState === 'AA-fail-blocked';
     
     setErrors(step1Errors);

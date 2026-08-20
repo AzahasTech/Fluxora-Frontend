@@ -3,6 +3,16 @@ import "./skeleton.css";
 
 export const MAX_LOADING_RETRIES = 3;
 
+/**
+ * Stable data-testid values for the top-level loading skeletons, shared by the
+ * skeleton components and the tests that assert their accessibility roles.
+ */
+export const LOADING_TEST_IDS = {
+  streams: "streams-loading",
+  treasury: "treasury-loading",
+  recipient: "recipient-loading",
+} as const;
+
 export function LoadingRetryState({
   label,
   onRetry,
