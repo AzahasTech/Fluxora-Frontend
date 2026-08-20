@@ -36,17 +36,16 @@ const createMockContext = () =>
 
 describe("faviconBadge utility", () => {
   let originalHeadHTML: string;
-  let getContextSpy: any;
-  let toDataURLSpy: any;
 
   beforeEach(() => {
     originalHeadHTML = document.head.innerHTML;
-    getContextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, "getContext")
-      .mockImplementation(() => createMockContext());
-    toDataURLSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, "toDataURL")
-      .mockReturnValue("data:image/png;base64,mockedFaviconDataUrl");
+    // Installed for their side effect; restored in afterEach via restoreAllMocks.
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() =>
+      createMockContext(),
+    );
+    vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue(
+      "data:image/png;base64,mockedFaviconDataUrl",
+    );
   });
 
   afterEach(() => {
