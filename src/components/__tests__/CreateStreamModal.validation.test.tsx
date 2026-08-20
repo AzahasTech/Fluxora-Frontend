@@ -231,7 +231,8 @@ describe('Property 15: Inline validation updates on change for touched fields', 
             rerender(<CreateStreamModal isOpen={true} onClose={() => {}} />);
             
             // After re-render, validation state should be identical
-            recipientContainer = container.querySelector('#create-stream-recipient')?.closest('.input-container');
+            recipientContainer =
+              container.querySelector('#create-stream-recipient')?.closest('.input-container') ?? null;
             expect(recipientContainer?.classList.contains('input-container--error')).toBe(initialError);
             expect(recipientContainer?.classList.contains('input-container--success')).toBe(initialSuccess);
           }

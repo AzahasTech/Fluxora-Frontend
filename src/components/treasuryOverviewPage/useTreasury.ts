@@ -137,6 +137,7 @@ export function useRecipientStreams(address: string | null | undefined): {
   loading: boolean;
   error: string | null;
   refetch: () => void;
+  retryCount: number;
 } {
   const [streams, setStreams] = useState<StreamRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(Boolean(address));

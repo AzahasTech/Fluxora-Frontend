@@ -1,4 +1,4 @@
-import { MouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import { MouseEvent, useEffect, useRef, useState } from "react";
 import { Download, AlertCircle, AlertTriangle, ArrowLeft, RefreshCw, Timer, Loader2, Cpu, Lock, PowerOff, Smartphone, Check } from "lucide-react";
 import styles from "./ConnectWalletModal.module.css";
 import { isConnected, requestAccess, getNetwork } from "@stellar/freighter-api";
@@ -26,7 +26,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   });
 }
 
-interface ConnectWalletModalProps {
+export interface ConnectWalletModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConnectFreighter?: () => void;
